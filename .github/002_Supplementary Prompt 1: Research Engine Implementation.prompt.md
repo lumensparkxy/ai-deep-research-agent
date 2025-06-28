@@ -31,7 +31,7 @@ Implement the core Research Engine module for the Deep Research Agent with the f
 - Create implementation plans and risk assessments
 
 **Key Implementation Details:**
-- Each stage should build upon previous stages' findings
+- Each stage MUST build upon previous stages' findings
 - Store stage results in structured format for report generation
 - Include progress feedback to user during research
 - Handle API failures gracefully with informative error messages
@@ -100,4 +100,4 @@ Implement the core Research Engine module for the Deep Research Agent with the f
 - Clear user communication about service limitations
 - Retry mechanisms for transient failures
 
-The engine should be modular, allowing individual stages to be modified or extended while maintaining the overall research flow.
+The engine MUST be modular, allowing individual stages to be modified or extended while maintaining the overall research flow.

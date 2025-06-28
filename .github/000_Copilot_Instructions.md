@@ -22,9 +22,9 @@ Execute the prompts in this exact order:
 - Use structured logging instead of print statements
 
 ### Architecture Principles
-- **Modular Design**: Each core module should be independent and extensible
+- **Modular Design**: Each core module MUST be independent and extensible
 - **Configuration-Driven**: All settings via environment variables and config files
-- **Session-Based**: Every research session must have unique identifiers and be persistable
+- **Session-Based**: Every research session MUST have unique identifiers and be persistable
 - **Error Resilience**: Graceful degradation when external services fail
 - **Progressive Enhancement**: Core functionality works even with minimal configuration
 
@@ -56,7 +56,7 @@ project/
 
 #### Research Engine (Stage 2)
 - Implement exactly 6 stages: Information Gathering → Validation → Clarification → Comparative Analysis → Synthesis → Final Conclusions
-- Each stage must build upon previous findings
+- Each stage MUST build upon previous findings
 - Store all stage results in structured JSON format
 - Calculate confidence scores based on source reliability and evidence consistency
 - Handle API rate limiting and network failures gracefully
@@ -121,11 +121,11 @@ project/
 6. Validate entire workflow with sample queries
 
 ## Common Pitfalls to Avoid
-- Don't implement caching or async processing in MVP (deferred features)
-- Don't skip input validation and sanitization
-- Don't hardcode file paths or API endpoints
-- Don't ignore rate limiting and error handling
-- Don't create circular dependencies between modules
+- DO NOT implement caching or async processing in MVP (deferred features)
+- DO NOT skip input validation and sanitization
+- DO NOT hardcode file paths or API endpoints
+- DO NOT ignore rate limiting and error handling
+- DO NOT create circular dependencies between modules
 
 ## Success Criteria
 The implementation is complete when:
@@ -137,7 +137,7 @@ The implementation is complete when:
 - Configuration is environment-driven and flexible
 
 ## MVP Focus
-The initial release should focus on core functionality:
+The initial release SHOULD focus on core functionality:
 - Basic CLI interface
 - Complete 6-stage research process
 - Report generation (all depths)

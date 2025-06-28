@@ -66,4 +66,4 @@ Create a comprehensive Report Generator that produces professional markdown repo
 - Each source cited in the report will be accompanied by its raw numeric reliability score (e.g., "Reliability: 0.85").
 - The score, ranging from 0.0 to 1.0, is derived from the AI-based assessment defined in the Research Engine module.
 
-The report generator should produce publication-ready documents that users can share, reference, or use for decision-making.
+The report generator MUST produce publication-ready documents that users can share, reference, or use for decision-making.

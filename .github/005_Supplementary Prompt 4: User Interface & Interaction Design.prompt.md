@@ -76,4 +76,4 @@ Current fitness level: beginner
 - **Help Text**: Contextual guidance for complex questions
 - **Error Recovery**: Easy ways to correct mistakes
 
-The interface should feel like talking to a knowledgeable research assistant who asks smart questions and provides clear guidance throughout the process.
+The interface MUST feel like talking to a knowledgeable research assistant who asks smart questions and provides clear guidance throughout the process.

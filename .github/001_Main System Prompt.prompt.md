@@ -1,4 +1,4 @@
-Create a comprehensive AI-powered Deep Research Agent that provides universal decision support through multi-stage iterative research and evidence-based recommendations. This system should help users make informed decisions about ANY topic through thorough analysis.
+Create a comprehensive AI-powered Deep Research Agent that provides universal decision support through multi-stage iterative research and evidence-based recommendations. This system MUST help users make informed decisions about ANY topic through thorough analysis.
 
 **Core Architecture:**
 - **Conversational Interface**: Natural language interaction (CLI, web, or chat interface)
@@ -29,7 +29,7 @@ Create a comprehensive AI-powered Deep Research Agent that provides universal de
 - **Data Storage**: Local files (JSON for sessions, Markdown for reports)
 - **Configuration**: Environment variables + YAML/JSON config files
 - **Error Handling**: Graceful degradation and user-friendly error messages
-- **Modularity**: Core components should be independent and extensible
+- **Modularity**: Core components MUST be independent and extensible
 - **Progress Feedback**: Real-time updates during multi-stage research process
 - **Input Validation**: Sanitize and validate all user inputs for security
 - **Confidence Scoring**: Calculate and display research confidence levels using a hybrid model that considers source quality, evidence consistency, and AI self-assessment.
@@ -51,7 +51,7 @@ Create a comprehensive AI-powered Deep Research Agent that provides universal de
 - **Input Validator**: Ensures data quality and security
 
 **Implementation Guidelines:**
-- Design for extensibility - new research stages or data sources should be easy to add
+- Design for extensibility - new research stages or data sources SHOULD be easy to add
 - Implement comprehensive logging for debugging and monitoring
 - Use structured data formats (JSON) for internal data exchange
 - Create clear separation between interface logic and core functionality

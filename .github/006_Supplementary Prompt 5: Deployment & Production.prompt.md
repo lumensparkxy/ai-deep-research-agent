@@ -85,4 +85,4 @@ LOG_LEVEL=INFO
 - **User Acceptance Testing**: Test complete research workflows
 - **Load Testing**: Verify performance under concurrent usage
 
-The system should be designed for easy deployment, monitoring, and maintenance in production environments while maintaining data integrity and user privacy.
+The system MUST be designed for easy deployment, monitoring, and maintenance in production environments while maintaining data integrity and user privacy.
