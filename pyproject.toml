@@ -85,7 +85,7 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "--verbose --cov=deep_research_agent --cov-report=term-missing"
+addopts = "--verbose --cov=. --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.9"

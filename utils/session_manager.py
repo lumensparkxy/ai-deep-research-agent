@@ -112,7 +112,7 @@ class SessionManager:
             
             self.logger.debug(f"Saved session: {session_id}")
             
-        except (OSError, json.JSONEncodeError) as e:
+        except (OSError, ValueError) as e:
             self.logger.error(f"Failed to save session {session_id}: {e}")
             raise ValidationError(f"Could not save session: {e}")
     

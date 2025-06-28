@@ -1,0 +1,33 @@
+{
+  "sample_sessions": [
+    {
+      "session_id": "DRA_20250628_120000",
+      "created_at": "2025-06-28T12:00:00",
+      "version": "1.0.0",
+      "query": "Best smartphone under $500 for photography",
+      "context": {
+        "personalize": true,
+        "user_info": {
+          "budget": "500",
+          "priority": "photography"
+        }
+      },
+      "research_results": {
+        "stages": [
+          {
+            "stage": 1,
+            "stage_name": "Initial Analysis",
+            "findings": {
+              "key_factors": ["price", "camera quality", "brand reputation"]
+            },
+            "timestamp": "2025-06-28T12:05:00"
+          }
+        ],
+        "final_conclusions": {},
+        "confidence_score": 0.75
+      },
+      "report_path": "/path/to/report.md",
+      "status": "completed"
+    }
+  ]
+}
