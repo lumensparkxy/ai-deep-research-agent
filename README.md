@@ -450,12 +450,21 @@ The system can handle any research topic and provides evidence-based recommendat
 
 [License information to be added]
 
-## 🔗 Links
+## � Documentation
 
-- [Foundation Complete Documentation](FOUNDATION_COMPLETE.md)
-- [Real AI Implementation Documentation](REAL_AI_COMPLETE.md)
-- [Development Version Management](VERSION_MANAGEMENT.md)
-- [Next Steps and Future Development](NEXT_STEPS.md)
+For comprehensive documentation, see the [`docs/`](docs/) folder:
+
+- **[Documentation Index](docs/README.md)** - Complete documentation overview
+- **[Version Management Guide](docs/VERSION_MANAGEMENT.md)** - Release and version management
+- **[Foundation Complete](docs/FOUNDATION_COMPLETE.md)** - Foundation implementation status
+- **[Real AI Complete](docs/REAL_AI_COMPLETE.md)** - AI integration completion status
+- **[Next Steps](docs/NEXT_STEPS.md)** - Future development roadmap
+
+## 🔗 Quick Links
+
+- [Main README](README.md) - Project overview (this file)
+- [CHANGELOG](CHANGELOG.md) - Version history and changes
+- [Test Documentation](tests/README.md) - Testing guides and information
 
 ---
 

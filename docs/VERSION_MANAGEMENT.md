@@ -12,16 +12,16 @@ The project uses [Semantic Versioning (SemVer)](https://semver.org/) with the fo
 
 ## Single Source of Truth
 
-Version information is maintained in `__init__.py` as the single source of truth:
+Version information is maintained in `../__init__.py` as the single source of truth:
 
 ```python
 __version__ = "0.1.0"
 ```
 
 All other files read the version from this location:
-- `config/settings.py` reads from `__init__.py`
-- `pyproject.toml` references the version dynamically
-- `config/settings.yaml` serves as a fallback
+- `../config/settings.py` reads from `../__init__.py`
+- `../pyproject.toml` references the version dynamically
+- `../config/settings.yaml` serves as a fallback
 
 ## Tools Available
 
@@ -99,7 +99,7 @@ git status
 This will:
 1. Check that git working directory is clean
 2. Bump the version number
-3. Update `CHANGELOG.md` with the new version
+3. Update `../CHANGELOG.md` with the new version
 4. Commit the changes
 5. Create a git tag
 6. Provide instructions for pushing
@@ -119,7 +119,7 @@ If you prefer manual control:
 
 3. **Commit changes**:
    ```bash
-   git add __init__.py config/settings.yaml CHANGELOG.md
+   git add ../__init__.py ../config/settings.yaml ../CHANGELOG.md
    git commit -m "Bump version to 0.2.0"
    ```
 
@@ -171,15 +171,15 @@ python version_manager.py bump major --prerelease rc
 
 The version management system updates these files:
 
-- `__init__.py` - Primary version definition
-- `config/settings.yaml` - Fallback version reference
-- `CHANGELOG.md` - Release history and notes
-- `pyproject.toml` - Package metadata
+- `../__init__.py` - Primary version definition
+- `../config/settings.yaml` - Fallback version reference
+- `../CHANGELOG.md` - Release history and notes
+- `../pyproject.toml` - Package metadata
 
 ## Best Practices
 
 1. **Always test before releasing**: Run your test suite before bumping versions
-2. **Update changelog**: Keep `CHANGELOG.md` current with each release
+2. **Update changelog**: Keep `../CHANGELOG.md` current with each release
 3. **Use semantic versioning**: Follow SemVer principles consistently
 4. **Tag releases**: Always create git tags for releases
 5. **Clean working directory**: Ensure no uncommitted changes before releasing
@@ -202,7 +202,7 @@ python -c "from config.settings import Settings; print(Settings().app_version)"
 ## Troubleshooting
 
 ### Version Not Updating
-- Ensure `__init__.py` exists with correct format
+- Ensure `../__init__.py` exists with correct format
 - Check file permissions
 - Verify you're in the correct directory
 
@@ -213,15 +213,15 @@ python -c "from config.settings import Settings; print(Settings().app_version)"
 
 ### Import Errors
 - Ensure the project structure is correct
-- Check that `__init__.py` contains valid Python syntax
+- Check that `../__init__.py` contains valid Python syntax
 - Verify all required files exist
 
 ## Integration with CI/CD
 
 The version management system is designed to work with automated CI/CD pipelines:
 
-- Version numbers are automatically read from `__init__.py`
-- `pyproject.toml` supports dynamic versioning
+- Version numbers are automatically read from `../__init__.py`
+- `../pyproject.toml` supports dynamic versioning
 - Git tags can trigger automated deployments
 - Changelog format supports automated release notes
 
