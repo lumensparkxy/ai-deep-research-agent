@@ -23,7 +23,8 @@ class InputValidator:
         
         # Common patterns for validation
         self.patterns = {
-            'session_id': re.compile(r'^DRA_\d{8}_\d{6}$'),
+            # Allow DRA_YYYYMMDD_HHMMSS or with optional microseconds suffix
+            'session_id': re.compile(r'^DRA_\d{8}_\d{6}(?:_\d{6})?$'),
             'file_path': re.compile(r'^[a-zA-Z0-9._/\-\s]+$'),
             'query': re.compile(r'^.{5,500}$'),  # 5-500 characters
             'email': re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'),

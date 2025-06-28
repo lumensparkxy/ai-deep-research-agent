@@ -35,13 +35,19 @@ class TestIntegration:
     @pytest.fixture
     def integration_settings(self, temp_workspace):
         """Settings configured for integration testing."""
+        # Use a unique subdirectory for each test to ensure isolation
+        test_session_path = temp_workspace / "sessions"
+        test_report_path = temp_workspace / "reports"
+        test_session_path.mkdir(exist_ok=True)
+        test_report_path.mkdir(exist_ok=True)
+
         with patch.dict('os.environ', {
             'GEMINI_API_KEY': 'test_integration_key',
-            'SESSION_STORAGE_PATH': str(temp_workspace / "sessions"),
-            'REPORT_OUTPUT_PATH': str(temp_workspace / "reports"),
+            'SESSION_STORAGE_PATH': str(test_session_path),
+            'REPORT_OUTPUT_PATH': str(test_report_path),
             'DEBUG': 'true'
         }):
-            return Settings()
+            yield Settings()
     
     def test_full_conversation_to_session_flow(self, integration_settings, temp_workspace):
         """Test complete flow from conversation to session creation."""
@@ -56,7 +62,7 @@ class TestIntegration:
             conversation_handler = ConversationHandler(integration_settings)
             
             # Test conversation flow with mocked inputs
-            with patch('builtins.input', side_effect=['Best smartphone under $500', 'n', 'standard']):
+            with patch('builtins.input', side_effect=['Best smartphone under $500', 'y', 'n', 'standard']):
                 
                 # Mock the research engine conduct_research method
                 mock_engine.conduct_research.return_value = {

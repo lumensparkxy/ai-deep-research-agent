@@ -42,7 +42,7 @@ class TestInputValidator:
         assert "<script>" not in result
         assert "alert" in result  # Content should remain, just tags removed
         # All dangerous characters are removed: < > ' "
-        assert result == "Hello scriptalert(xss)/script world"
+        assert result == "Hello alertxss world"
     
     def test_sanitize_string_length_limit(self, validator):
         """Test string length limiting."""

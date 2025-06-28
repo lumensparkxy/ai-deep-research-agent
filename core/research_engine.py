@@ -31,14 +31,14 @@ class ResearchEngine:
         # Configure Gemini AI
         self._setup_gemini()
         
-        # Stage configurations
+        # Stage configurations: store method names to allow dynamic patching
         self.stages = [
-            {"number": 1, "name": "Information Gathering", "method": self._stage_1_information_gathering},
-            {"number": 2, "name": "Validation & Fact-Checking", "method": self._stage_2_validation},
-            {"number": 3, "name": "Clarification & Follow-up", "method": self._stage_3_clarification},
-            {"number": 4, "name": "Comparative Analysis", "method": self._stage_4_comparative_analysis},
-            {"number": 5, "name": "Synthesis & Integration", "method": self._stage_5_synthesis},
-            {"number": 6, "name": "Final Conclusions", "method": self._stage_6_final_conclusions}
+            {"number": 1, "name": "Information Gathering", "method_name": "_stage_1_information_gathering"},
+            {"number": 2, "name": "Validation & Fact-Checking", "method_name": "_stage_2_validation"},
+            {"number": 3, "name": "Clarification & Follow-up", "method_name": "_stage_3_clarification"},
+            {"number": 4, "name": "Comparative Analysis", "method_name": "_stage_4_comparative_analysis"},
+            {"number": 5, "name": "Synthesis & Integration", "method_name": "_stage_5_synthesis"},
+            {"number": 6, "name": "Final Conclusions", "method_name": "_stage_6_final_conclusions"}
         ]
     
     def _setup_gemini(self) -> None:
@@ -76,6 +76,14 @@ class ResearchEngine:
         Returns:
             Complete research results
         """
+        # Validate input query and create a new session to ensure proper session setup
+        validated_query = self.validator.validate_query(query)
+        try:
+            session_data = self.session_manager.create_session(validated_query, context)
+            session_id = session_data.get("session_id", session_id)
+        except ValidationError:
+            # Propagate session creation or validation errors
+            raise
         self.logger.info(f"Starting 6-stage research for session {session_id}")
         
         # Initialize research state
@@ -99,7 +107,9 @@ class ResearchEngine:
             for stage_config in self.stages:
                 stage_num = stage_config["number"]
                 stage_name = stage_config["name"]
-                stage_method = stage_config["method"]
+                # Lookup method dynamically to allow test patching
+                method_name = stage_config.get("method_name")
+                stage_method = getattr(self, method_name)
                 
                 self.logger.info(f"Executing Stage {stage_num}: {stage_name}")
                 
@@ -273,22 +283,36 @@ class ResearchEngine:
     
     def _call_gemini_with_retry(self, prompt: str, max_retries: int = None) -> str:
         """Call Gemini API with retry logic."""
-        max_retries = max_retries or self.settings.max_retries
+        # Determine number of retries; coerce to int and fallback to default 3
+        try:
+            max_retries = int(max_retries) if isinstance(max_retries, (int, str)) else None
+        except Exception:
+            max_retries = None
+        if max_retries is None:
+            try:
+                max_retries = int(self.settings.max_retries)
+            except Exception:
+                max_retries = 3
         
         for attempt in range(max_retries):
             try:
                 response = self.model.generate_content(prompt)
-                
                 if response.text:
                     return response.text
-                else:
-                    raise ValidationError("Empty response from Gemini")
-                    
+                # Empty response is a terminal validation error
+                raise ValidationError("Empty response from Gemini")
+            except ValidationError:
+                # Propagate validation errors immediately
+                raise
             except Exception as e:
                 self.logger.warning(f"Gemini API attempt {attempt + 1} failed: {e}")
-                
+                # Exponential backoff with safe delay
+                try:
+                    delay = float(self.settings.retry_delay)
+                except Exception:
+                    delay = 1.0
                 if attempt < max_retries - 1:
-                    time.sleep(self.settings.retry_delay * (2 ** attempt))  # Exponential backoff
+                    time.sleep(delay * (2 ** attempt))
                 else:
                     raise ValidationError(f"Gemini API failed after {max_retries} attempts: {e}")
     
