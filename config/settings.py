@@ -1,0 +1,248 @@
+"""
+Configuration Management for Deep Research Agent
+Handles loading and validation of settings from environment variables and config files.
+"""
+
+import os
+import logging
+import yaml
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from dotenv import load_dotenv
+
+
+class ConfigurationError(Exception):
+    """Raised when configuration is invalid or missing required values."""
+    pass
+
+
+class Settings:
+    """Configuration management class for Deep Research Agent."""
+    
+    def __init__(self, config_path: Optional[str] = None, env_path: Optional[str] = None):
+        """
+        Initialize configuration management.
+        
+        Args:
+            config_path: Path to YAML configuration file
+            env_path: Path to .env file
+        """
+        self.logger = logging.getLogger(__name__)
+        
+        # Set default paths
+        self.base_path = Path(__file__).parent.parent
+        self.config_path = config_path or self.base_path / "config" / "settings.yaml"
+        self.env_path = env_path or self.base_path / ".env"
+        
+        # Load configuration
+        self._load_environment()
+        self._load_yaml_config()
+        self._validate_required_settings()
+        self._create_directories()
+        
+    def _load_environment(self) -> None:
+        """Load environment variables from .env file if it exists."""
+        if self.env_path.exists():
+            load_dotenv(self.env_path)
+            self.logger.info(f"Loaded environment variables from {self.env_path}")
+        else:
+            self.logger.warning(f"No .env file found at {self.env_path}")
+    
+    def _load_yaml_config(self) -> None:
+        """Load YAML configuration file."""
+        try:
+            with open(self.config_path, 'r') as file:
+                self.config = yaml.safe_load(file)
+            self.logger.info(f"Loaded configuration from {self.config_path}")
+        except FileNotFoundError:
+            raise ConfigurationError(f"Configuration file not found: {self.config_path}")
+        except yaml.YAMLError as e:
+            raise ConfigurationError(f"Invalid YAML configuration: {e}")
+    
+    def _validate_required_settings(self) -> None:
+        """Validate that all required settings are present."""
+        required_env_vars = ["GEMINI_API_KEY"]
+        missing_vars = []
+        
+        for var in required_env_vars:
+            if not os.getenv(var):
+                missing_vars.append(var)
+        
+        if missing_vars:
+            raise ConfigurationError(
+                f"Missing required environment variables: {', '.join(missing_vars)}"
+            )
+    
+    def _create_directories(self) -> None:
+        """Create required directories if they don't exist."""
+        directories = [
+            self.session_storage_path,
+            self.report_output_path
+        ]
+        
+        for directory in directories:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Ensured directory exists: {directory}")
+    
+    # Application Settings
+    @property
+    def app_name(self) -> str:
+        return self.config.get("app", {}).get("name", "Deep Research Agent")
+    
+    @property
+    def app_version(self) -> str:
+        return self.config.get("app", {}).get("version", "1.0.0")
+    
+    @property
+    def debug_mode(self) -> bool:
+        return self.config.get("app", {}).get("debug", False)
+    
+    # API Settings
+    @property
+    def gemini_api_key(self) -> str:
+        return os.getenv("GEMINI_API_KEY", "")
+    
+    @property
+    def ai_model(self) -> str:
+        return self.config.get("ai", {}).get("model", "gemini-2.5-pro")
+    
+    @property
+    def enable_grounding(self) -> bool:
+        env_val = os.getenv("ENABLE_GROUNDING", "true").lower()
+        return env_val in ("true", "1", "yes") and self.config.get("ai", {}).get("enable_grounding", True)
+    
+    @property
+    def enable_search(self) -> bool:
+        env_val = os.getenv("ENABLE_SEARCH", "true").lower()
+        return env_val in ("true", "1", "yes") and self.config.get("ai", {}).get("enable_search", True)
+    
+    @property
+    def max_retries(self) -> int:
+        return self.config.get("ai", {}).get("max_retries", 3)
+    
+    @property
+    def retry_delay(self) -> float:
+        return self.config.get("ai", {}).get("retry_delay", 1.0)
+    
+    @property
+    def rate_limit_delay(self) -> float:
+        return self.config.get("ai", {}).get("rate_limit_delay", 2.0)
+    
+    # Research Settings
+    @property
+    def research_depth(self) -> str:
+        return os.getenv("RESEARCH_DEPTH", self.config.get("research", {}).get("default_depth", "standard"))
+    
+    @property
+    def max_sources(self) -> int:
+        return int(os.getenv("MAX_RESEARCH_SOURCES", 
+                           self.config.get("research", {}).get("max_sources", 10)))
+    
+    @property
+    def timeout_seconds(self) -> int:
+        return int(os.getenv("RESEARCH_TIMEOUT_SECONDS", 
+                           self.config.get("research", {}).get("timeout_seconds", 300)))
+    
+    @property
+    def research_stages(self) -> List[str]:
+        return self.config.get("research", {}).get("stages", [
+            "Information Gathering",
+            "Validation & Fact-Checking",
+            "Clarification & Follow-up",
+            "Comparative Analysis",
+            "Synthesis & Integration",
+            "Final Conclusions"
+        ])
+    
+    # Storage Settings
+    @property
+    def session_storage_path(self) -> str:
+        return os.getenv("SESSION_STORAGE_PATH", "./data/sessions")
+    
+    @property
+    def report_output_path(self) -> str:
+        return os.getenv("REPORT_OUTPUT_PATH", "./data/reports")
+    
+    @property
+    def session_format(self) -> str:
+        return self.config.get("storage", {}).get("session_format", "json")
+    
+    @property
+    def report_format(self) -> str:
+        return self.config.get("storage", {}).get("report_format", "markdown")
+    
+    # Output Settings
+    @property
+    def include_sources(self) -> bool:
+        env_val = os.getenv("INCLUDE_SOURCES", "true").lower()
+        return env_val in ("true", "1", "yes") and self.config.get("output", {}).get("include_sources", True)
+    
+    @property
+    def include_timestamps(self) -> bool:
+        env_val = os.getenv("INCLUDE_TIMESTAMPS", "true").lower()
+        return env_val in ("true", "1", "yes") and self.config.get("output", {}).get("include_timestamps", True)
+    
+    @property
+    def include_confidence_scores(self) -> bool:
+        return self.config.get("output", {}).get("include_confidence_scores", True)
+    
+    @property
+    def report_depths(self) -> Dict[str, Any]:
+        return self.config.get("output", {}).get("report_depths", {})
+    
+    # Logging Settings
+    @property
+    def log_level(self) -> str:
+        return os.getenv("LOG_LEVEL", "INFO")
+    
+    # Personalization Settings
+    @property
+    def personalization_categories(self) -> Dict[str, List[str]]:
+        return self.config.get("personalization", {}).get("categories", {})
+    
+    def get_category_questions(self, category: str) -> List[str]:
+        """Get personalization questions for a specific category."""
+        return self.personalization_categories.get(category.lower(), 
+                                                 self.personalization_categories.get("other", []))
+    
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        """Get a setting value by key with optional default."""
+        keys = key.split('.')
+        value = self.config
+        
+        try:
+            for k in keys:
+                value = value[k]
+            return value
+        except (KeyError, TypeError):
+            return default
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Return configuration as dictionary (excluding sensitive data)."""
+        return {
+            "app": {
+                "name": self.app_name,
+                "version": self.app_version,
+                "debug": self.debug_mode
+            },
+            "research": {
+                "depth": self.research_depth,
+                "max_sources": self.max_sources,
+                "timeout": self.timeout_seconds,
+                "stages": self.research_stages
+            },
+            "storage": {
+                "session_path": self.session_storage_path,
+                "report_path": self.report_output_path
+            },
+            "output": {
+                "include_sources": self.include_sources,
+                "include_timestamps": self.include_timestamps,
+                "include_confidence": self.include_confidence_scores
+            }
+        }
+
+
+def get_settings() -> Settings:
+    """Get configured settings instance."""
+    return Settings()

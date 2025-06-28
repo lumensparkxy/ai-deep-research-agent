@@ -1,0 +1,54 @@
+app:
+  name: "Deep Research Agent"
+  version: "0.1.0"
+  debug: false
+
+research:
+  default_depth: "standard"
+  max_sources: 10
+  timeout_seconds: 300
+  stages:
+    - "Information Gathering"
+    - "Validation & Fact-Checking"
+    - "Clarification & Follow-up"
+    - "Comparative Analysis"
+    - "Synthesis & Integration"
+    - "Final Conclusions"
+
+ai:
+  model: "gemini-2.5-pro"
+  enable_grounding: true
+  enable_search: true
+  max_retries: 3
+  retry_delay: 1.0
+  rate_limit_delay: 2.0
+
+output:
+  report_formats: ["markdown"]
+  include_sources: true
+  include_timestamps: true
+  include_confidence_scores: true
+  report_depths:
+    quick: 
+      pages: "2-3"
+      sections: ["executive_summary", "key_recommendations", "sources"]
+    standard:
+      pages: "5-7"
+      sections: ["executive_summary", "research_overview", "detailed_analysis", "recommendations", "implementation", "sources"]
+    detailed:
+      pages: "10+"
+      sections: ["executive_summary", "methodology", "stage_analysis", "detailed_findings", "comparative_analysis", "recommendations", "implementation", "risk_assessment", "success_metrics", "sources"]
+
+storage:
+  session_format: "json"
+  report_format: "markdown"
+  backup_enabled: false
+  cleanup_days: 30
+
+personalization:
+  categories:
+    health: ["age", "weight", "fitness_level", "health_conditions", "goals"]
+    finance: ["income_range", "risk_tolerance", "timeline", "goals", "current_assets"]
+    technology: ["experience_level", "budget", "use_case", "platform_preference"]
+    lifestyle: ["location", "budget", "preferences", "constraints", "timeline"]
+    other: ["relevant_context", "constraints", "preferences", "timeline"]
