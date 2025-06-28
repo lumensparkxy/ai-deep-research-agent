@@ -128,11 +128,25 @@ python main.py --config custom_settings.yaml --env custom.env
 
 For VS Code users, several tasks are available via `Ctrl+Shift+P` > "Tasks: Run Task":
 
+**Application Tasks:**
 - **Run Deep Research Agent** - Start interactive research session
-- **List Research Sessions** - View all past research sessions  
-- **Test Real Research** - Quick functionality test
 - **Debug Deep Research Agent** - Run with debug logging
+
+**Management Tasks:**
+- **List Research Sessions** - View all past research sessions  
 - **Cleanup Old Sessions** - Remove sessions older than 30 days
+
+**Testing Tasks:**
+- **Test Real Research** - Quick functionality test with actual AI integration
+
+**Available via Command Line:**
+```bash
+# Run targeted test suites
+python run_tests.py --priority1    # Critical tests only
+python run_tests.py --unit         # Unit tests only  
+python run_tests.py --security     # Security tests only
+python run_tests.py --core         # Core functionality tests
+```
 
 ## 📁 Project Structure
 
@@ -142,6 +156,7 @@ deep-research-agent/
 ├── requirements.txt            # Dependencies
 ├── .env.example               # Environment template
 ├── README.md                  # This file
+├── run_tests.py               # Enhanced test runner with markers
 ├── config/
 │   ├── __init__.py
 │   ├── settings.py            # Configuration management
@@ -155,6 +170,16 @@ deep-research-agent/
 │   ├── __init__.py
 │   ├── session_manager.py     # Session persistence
 │   └── validators.py          # Input validation
+├── tests/                     # Comprehensive test suite
+│   ├── __init__.py
+│   ├── conftest.py           # Pytest fixtures and configuration
+│   ├── test_session_manager.py  # SessionManager tests (32 tests)
+│   ├── test_validators.py    # InputValidator tests (37 tests)
+│   ├── test_security.py      # Security vulnerability tests (12 tests)
+│   ├── test_settings.py      # Configuration tests (11 tests)
+│   ├── test_conversation.py  # ConversationHandler tests
+│   ├── test_integration.py   # Integration tests
+│   └── test_research_engine_errors.py  # ResearchEngine error tests
 └── data/
     ├── sessions/              # JSON session files
     └── reports/               # Generated markdown reports
@@ -184,6 +209,33 @@ The YAML file contains structured configuration for:
 - AI model configuration
 - Output formatting options
 - Personalization categories
+
+### Test Configuration (pyproject.toml)
+
+The project uses pytest with custom markers defined in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "priority1: Critical tests that must pass",
+    "priority2: Important tests for key features", 
+    "priority3: Nice-to-have tests for edge cases",
+    "security: Security and vulnerability tests",
+    "integration: Integration tests between components",
+    "unit: Unit tests for individual components",
+    "regression: Regression tests to prevent feature breaking",
+    "performance: Performance and optimization tests",
+    "slow: Tests that take significant time to run",
+    "fast: Quick tests for rapid feedback",
+    "core: Core functionality tests",
+    "config: Configuration and settings tests", 
+    "validation: Input validation and sanitization tests",
+    "ai: AI and machine learning related tests",
+    "smoke: Basic smoke tests for critical paths"
+]
+```
+
+This marker system enables precise test selection for different development phases and CI/CD pipelines.
 
 ## 🔬 Research Methodology
 
@@ -219,9 +271,87 @@ The Deep Research Agent uses a 6-stage iterative process:
 - Success metrics
 - Comprehensive sources
 
-## 🧪 Testing & Validation
+## 🧪 Testing & Quality Assurance
 
-### Quick Test
+### Comprehensive Test Suite
+
+The Deep Research Agent includes a comprehensive test suite with **JUnit-style categorization** using pytest markers for organized test execution:
+
+#### Test Categories
+
+**Priority Levels:**
+- `--priority1` - Critical tests (92 tests) - Core functionality that must work
+- `--priority2` - Important tests - Significant features and error handling  
+- `--priority3` - Nice-to-have tests - Edge cases and optimization features
+
+**Test Types:**
+- `--unit` - Unit tests (69 tests) - Individual component testing
+- `--integration` - Integration tests - Component interaction testing
+- `--security` - Security tests (49 tests) - Vulnerability and attack prevention
+
+**Speed Categories:**
+- `--fast` - Fast tests - Quick feedback for development
+- `--slow` - Slow tests - Comprehensive but time-intensive tests
+
+**Functional Areas:**
+- `--core` - Core functionality (43 tests) - SessionManager, basic operations
+- `--config` - Configuration tests - Settings and environment validation
+- `--validation` - Validation tests - Input sanitization and security
+- `--ai` - AI-related tests - Research engine and AI integration
+
+**Test Purposes:**
+- `--regression` - Regression tests - Prevent feature breaking
+- `--performance` - Performance tests - Speed and efficiency validation
+- `--smoke` - Smoke tests - Basic functionality verification
+
+#### Running Tests
+
+```bash
+# Run all tests (default)
+python run_tests.py
+
+# Run only critical tests (fastest feedback)
+python run_tests.py --priority1
+
+# Run only unit tests (development workflow)
+python run_tests.py --unit
+
+# Run only security tests (security validation)
+python run_tests.py --security
+
+# Run only core functionality tests
+python run_tests.py --core
+
+# Run custom marker tests
+python run_tests.py --marker validation
+
+# Run with coverage reporting
+pytest --cov=. tests/
+```
+
+#### Test Runner Features
+
+The enhanced test runner (`run_tests.py`) provides:
+- **Colored output** with test category indicators
+- **Coverage reporting** integrated with pytest-cov
+- **Flexible marker selection** for targeted testing
+- **Progress indicators** and detailed reporting
+- **CI/CD integration** ready with exit codes
+
+#### Test Status & Coverage
+
+- **Unit Tests:** ✅ 68/69 passing (99% success rate)
+- **Core Tests:** ⚠️ 35/43 passing (81% success rate) - Configuration issues identified
+- **Security Tests:** ❌ 39/49 passing (80% success rate) - **CRITICAL vulnerabilities found**
+- **Priority 1 Tests:** ❌ 74/92 passing (80% success rate) - **CRITICAL issues identified**
+
+**Current Issues Requiring Attention:**
+- Security vulnerabilities in input sanitization (missing dangerous character filtering)
+- Configuration management failures (environment variable handling)
+- API signature mismatches in ResearchEngine components
+
+### Quick Validation Tests
+
 ```bash
 # Test basic functionality
 python test_foundation.py
@@ -231,6 +361,9 @@ python test_real_research.py
 
 # Complete demonstration
 python demo_complete.py
+
+# Run VS Code integrated tasks
+# Ctrl+Shift+P > "Tasks: Run Task" > "Test Real Research"
 ```
 
 ### Example Research Session
@@ -247,6 +380,14 @@ The system has been tested with various queries and consistently delivers:
    [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 17%
    🔍 Gathering initial information and evidence...
 ```
+
+### Test-Driven Development Workflow
+
+1. **Development Phase:** `python run_tests.py --unit --fast`
+2. **Feature Complete:** `python run_tests.py --priority1`  
+3. **Security Check:** `python run_tests.py --security`
+4. **Release Ready:** `python run_tests.py` (all tests)
+5. **Regression Testing:** `python run_tests.py --regression`
 
 ## 🔐 Security & Privacy
 

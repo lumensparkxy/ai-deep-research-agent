@@ -15,6 +15,9 @@ from utils.session_manager import SessionManager
 from utils.validators import ValidationError
 
 
+@pytest.mark.priority1
+@pytest.mark.core
+@pytest.mark.unit  
 class TestSessionManager:
     """Test cases for SessionManager functionality."""
     

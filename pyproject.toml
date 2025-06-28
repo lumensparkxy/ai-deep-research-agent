@@ -87,6 +87,25 @@ python_classes = "Test*"
 python_functions = "test_*"
 addopts = "--verbose --cov=. --cov-report=term-missing"
 
+# Custom markers for test categorization
+markers = [
+    "priority1: Priority 1 critical tests that must pass",
+    "priority2: Priority 2 important tests",  
+    "priority3: Priority 3 nice-to-have tests",
+    "security: Security and vulnerability tests",
+    "integration: Integration tests between components",
+    "unit: Unit tests for individual functions/classes",
+    "regression: Regression tests for bug prevention",
+    "performance: Performance and load tests",
+    "slow: Tests that take a long time to run",
+    "fast: Quick tests for rapid feedback",
+    "core: Core business logic tests",
+    "config: Configuration and settings tests",
+    "validation: Input validation and sanitization tests",
+    "ai: Tests requiring AI/API integration",
+    "smoke: Basic smoke tests for core functionality",
+]
+
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true
