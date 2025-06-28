@@ -105,4 +105,4 @@ output:
 - **Cleanup Utilities**: Methods to manage old sessions and reports
 - **Backup Strategy**: Consider session data backup and recovery mechanisms
 
-The system should be easily deployable across different environments while maintaining data integrity and user privacy.
+The system MUST be easily deployable across different environments while maintaining data integrity and user privacy.
