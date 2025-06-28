@@ -1,6 +1,5 @@
 app:
   name: "Deep Research Agent"
-  version: "0.1.0"
   debug: false
 
 research:

@@ -91,7 +91,19 @@ class Settings:
     
     @property
     def app_version(self) -> str:
-        return self.config.get("app", {}).get("version", "1.0.0")
+        """Get version from project __init__.py file."""
+        try:
+            init_file = self.base_path / "__init__.py"
+            if init_file.exists():
+                content = init_file.read_text()
+                import re
+                match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+                if match:
+                    return match.group(1)
+        except Exception:
+            pass
+        # Fallback if version cannot be read
+        return "unknown"
     
     @property
     def debug_mode(self) -> bool:
