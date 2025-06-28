@@ -7,6 +7,7 @@ import re
 import logging
 from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
+import os
 
 
 class ValidationError(Exception):
@@ -28,7 +29,12 @@ class InputValidator:
             'email': re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'),
             'number': re.compile(r'^-?\d+\.?\d*$')
         }
-    
+        self.sql_blacklist = re.compile(r'\b(ALTER|CREATE|DELETE|DROP|EXEC|INSERT|MERGE|SELECT|UPDATE|UNION)\b', re.IGNORECASE)
+        self.xss_blacklist = re.compile(r'(<script.*?>|</script>|onerror=|onload=|javascript:|<iframe>|<svg>|<body>)', re.IGNORECASE)
+        self.command_blacklist = re.compile(r'(rm -rf|wget|curl|del C:|format C:)', re.IGNORECASE)
+        self.ldap_blacklist = re.compile(r'[\*\(\)\\]', re.IGNORECASE)
+        self.control_chars_blacklist = re.compile(r'[\x00-\x1f\x7f]')
+
     def sanitize_string(self, text: str, max_length: int = 1000) -> str:
         """
         Sanitize string input by removing dangerous characters and limiting length.
@@ -42,12 +48,20 @@ class InputValidator:
         """
         if not isinstance(text, str):
             text = str(text)
+
+        # Remove control characters
+        text = self.control_chars_blacklist.sub('', text)
+
+        # Remove potentially dangerous characters and patterns
+        text = self.sql_blacklist.sub('', text)
+        text = self.xss_blacklist.sub('', text)
+        text = self.command_blacklist.sub('', text)
+        text = self.ldap_blacklist.sub('', text)
         
-        # Remove potentially dangerous characters
-        dangerous_chars = ['<', '>', '"', "'", '&', '`', '$', '\\']
+        dangerous_chars = ['<', '>', '\"''', "'", '&', '`', '$', '\\', ';', '|', '--']
         for char in dangerous_chars:
             text = text.replace(char, '')
-        
+
         # Limit length
         text = text[:max_length]
         
@@ -103,53 +117,59 @@ class InputValidator:
         """
         if not session_id or not isinstance(session_id, str):
             raise ValidationError("Session ID must be a non-empty string")
-        
-        if not self.patterns['session_id'].match(session_id):
+
+        sanitized_id = self.sanitize_string(session_id)
+        if sanitized_id != session_id:
+            raise ValidationError("Session ID contains invalid characters.")
+
+        if not self.patterns['session_id'].match(sanitized_id):
             raise ValidationError("Session ID must follow format: DRA_YYYYMMDD_HHMMSS")
-        
-        return session_id
-    
-    def validate_file_path(self, file_path: str, must_exist: bool = False) -> str:
+
+        return sanitized_id
+
+    def validate_file_path(self, file_path: str, project_root: Path, must_exist: bool = False) -> str:
         """
         Validate file path for security and format.
-        
+
         Args:
             file_path: Path to validate
+            project_root: The root directory of the project for validation context.
             must_exist: Whether file must already exist
-            
+
         Returns:
             Validated file path
-            
+
         Raises:
             ValidationError: If path is invalid
         """
         if not file_path or not isinstance(file_path, str):
             raise ValidationError("File path must be a non-empty string")
-        
+
         # Prevent directory traversal attacks
-        if '..' in file_path or file_path.startswith('/'):
-            if not file_path.startswith('./'):
-                raise ValidationError("File path contains invalid characters or absolute paths")
-        
+        if '..' in file_path or '\\' in file_path:
+            raise ValidationError("File path cannot contain '..' or '\\'.")
+
+        # Prevent absolute paths and other schemes
+        if os.path.isabs(file_path) or ':' in file_path or file_path.startswith('~'):
+            raise ValidationError("File path cannot be absolute or contain schemes.")
+
         # Convert to Path object for validation
         try:
-            path = Path(file_path)
-            
-            # Check if path is within allowed directories
-            resolved_path = path.resolve()
-            allowed_base = Path.cwd().resolve()
-            
-            if not str(resolved_path).startswith(str(allowed_base)):
+            # Create a safe, absolute path by joining the project root and the relative file path
+            safe_path = project_root.joinpath(file_path).resolve()
+
+            # Check if the resolved path is within the project directory
+            if not str(safe_path).startswith(str(project_root.resolve())):
                 raise ValidationError("File path must be within project directory")
-            
-            if must_exist and not path.exists():
+
+            if must_exist and not safe_path.exists():
                 raise ValidationError(f"File does not exist: {file_path}")
-                
+
         except (OSError, ValueError) as e:
             raise ValidationError(f"Invalid file path: {e}")
-        
-        return str(path)
-    
+
+        return str(file_path)
+
     def validate_personalization_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate personalization data from user.
@@ -165,10 +185,16 @@ class InputValidator:
         """
         if not isinstance(data, dict):
             raise ValidationError("Personalization data must be a dictionary")
-        
+
+        if len(data) > 100:  # Limit number of keys
+            raise ValidationError("Personalization data cannot have more than 100 keys.")
+
         validated_data = {}
-        
+
         for key, value in data.items():
+            if key.lower() in ('__proto__', 'constructor', 'prototype') or '.' in key:
+                raise ValidationError(f"Invalid key in personalization data: {key}")
+
             # Sanitize key
             clean_key = self.sanitize_string(key, max_length=50)
             if not clean_key:
@@ -181,8 +207,12 @@ class InputValidator:
                 clean_value = value
             elif isinstance(value, bool):
                 clean_value = value
+            elif isinstance(value, dict):
+                clean_value = self.validate_personalization_data(value)
             elif isinstance(value, list):
-                clean_value = [self.sanitize_string(str(item), max_length=100) 
+                if len(value) > 50: # Limit list size
+                    raise ValidationError(f"List in personalization data for key '{clean_key}' is too long.")
+                clean_value = [self.sanitize_string(str(item), max_length=100)
                               for item in value if item][:10]  # Limit list size
             else:
                 # Convert to string and sanitize

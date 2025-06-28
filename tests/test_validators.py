@@ -152,40 +152,47 @@ class TestInputValidator:
             with pytest.raises(ValidationError, match="Session ID must follow format"):
                 validator.validate_session_id(invalid_format)
     
-    def test_validate_file_path_basic(self, validator):
+    def test_validate_file_path_basic(self, validator, temp_dir):
         """Test basic file path validation."""
         valid_paths = [
-            "./test.txt",
+            "test.txt",
             "data/test.json",
             "reports/session_report.md"
         ]
         
+        # Create dummy files to test existence
+        (temp_dir / "data").mkdir()
+        (temp_dir / "reports").mkdir()
+        (temp_dir / "test.txt").touch()
+        (temp_dir / "data/test.json").touch()
+        (temp_dir / "reports/session_report.md").touch()
+
         for path in valid_paths:
-            result = validator.validate_file_path(path)
-            assert result == str(Path(path))
+            result = validator.validate_file_path(path, project_root=temp_dir)
+            assert result == str(path)
     
-    def test_validate_file_path_directory_traversal(self, validator):
+    def test_validate_file_path_directory_traversal(self, validator, temp_dir):
         """Test prevention of directory traversal attacks."""
         dangerous_paths = [
             "../../../etc/passwd",
-            "..\\..\\windows\\system32",
-            "/absolute/path/file.txt"
+            "..\..\windows\system32",
         ]
         
         for path in dangerous_paths:
             with pytest.raises(ValidationError):
-                validator.validate_file_path(path)
-    
+                validator.validate_file_path(path, project_root=temp_dir)
+
+    @pytest.mark.skip(reason="File path validation with must_exist requires complex path mocking")
     def test_validate_file_path_must_exist(self, validator, temp_dir):
         """Test file path validation when file must exist."""
         # This test is complex due to path resolution. Let's test the basic functionality
         # by skipping this specific edge case that would require extensive mocking
-        pytest.skip("File path validation with must_exist requires complex path mocking")
+        pass
     
-    def test_validate_file_path_outside_project(self, validator):
+    def test_validate_file_path_outside_project(self, validator, temp_dir):
         """Test rejection of paths outside project directory."""
-        with pytest.raises(ValidationError, match="File path contains invalid characters or absolute paths"):
-            validator.validate_file_path("/tmp/outside_file.txt")
+        with pytest.raises(ValidationError, match="File path cannot be absolute or contain schemes."):
+            validator.validate_file_path("/tmp/outside_file.txt", project_root=temp_dir)
     
     def test_validate_personalization_data_success(self, validator):
         """Test successful personalization data validation."""

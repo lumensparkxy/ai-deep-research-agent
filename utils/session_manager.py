@@ -5,6 +5,7 @@ Handles persistence and retrieval of research sessions.
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -110,6 +111,9 @@ class SessionManager:
             with open(session_file, 'w', encoding='utf-8') as f:
                 json.dump(session_data, f, indent=2, ensure_ascii=False)
             
+            # Set secure file permissions
+            os.chmod(session_file, 0o600)
+
             self.logger.debug(f"Saved session: {session_id}")
             
         except (OSError, ValueError) as e:

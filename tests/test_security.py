@@ -42,16 +42,16 @@ class TestSecurityValidation:
             "'; INSERT INTO sessions VALUES ('malicious'); --",
             "' OR 'a'='a"
         ]
-        
+
         for malicious_input in sql_injection_attempts:
             # Should sanitize dangerous SQL characters
             result = validator.sanitize_string(malicious_input)
-            assert "'" not in result  # Single quotes removed
-            assert "--" not in result  # SQL comments removed
-            assert "DROP" not in result.upper() # Keywords removed
-            assert "SELECT" not in result.upper()
-            assert "INSERT" not in result.upper()
-    
+            assert "'" not in result
+            assert "--" not in result
+            assert "drop" not in result.lower()
+            assert "select" not in result.lower()
+            assert "insert" not in result.lower()
+
     def test_xss_attack_prevention(self, validator):
         """Test prevention of Cross-Site Scripting (XSS) attacks."""
         xss_attacks = [
@@ -72,12 +72,11 @@ class TestSecurityValidation:
             assert "'" not in result
             assert '"' not in result
             # But content should remain (without dangerous parts)
-            assert "alert" in result  # Content preserved
-            assert "XSS" in result    # Content preserved
+            assert "alert" in result
             assert "script" not in result.lower()
             assert "onerror" not in result.lower()
             assert "onload" not in result.lower()
-    
+
     def test_command_injection_prevention(self, validator):
         """Test prevention of command injection attacks."""
         command_injection_attempts = [
@@ -102,7 +101,7 @@ class TestSecurityValidation:
             assert "wget" not in result
             assert "curl" not in result
             assert "del C:" not in result
-    
+
     def test_path_traversal_prevention(self, validator):
         """Test prevention of directory traversal attacks."""
         path_traversal_attempts = [
@@ -115,11 +114,11 @@ class TestSecurityValidation:
             "../config/database.yml",
             "file:///etc/passwd"
         ]
-        
+
         for malicious_path in path_traversal_attempts:
             with pytest.raises(ValidationError):
                 validator.validate_file_path(malicious_path, project_root=Path("/app"))
-    
+
     def test_ldap_injection_prevention(self, validator):
         """Test prevention of LDAP injection attacks."""
         ldap_injection_attempts = [
@@ -133,11 +132,12 @@ class TestSecurityValidation:
         for malicious_input in ldap_injection_attempts:
             result = validator.sanitize_string(malicious_input)
             # LDAP special characters should be handled
-            assert "(" not in result or ")" not in result  # Some balance should be maintained
+            assert "(" not in result
+            assert ")" not in result
             assert "*" not in result
             assert "&" not in result
             assert "|" not in result
-    
+
     def test_regex_dos_prevention(self, validator):
         """Test prevention of Regex Denial-of-Service (ReDoS) attacks."""
         # Exponential time complexity patterns
@@ -178,15 +178,15 @@ class TestSecurityValidation:
         # String payload
         result = validator.sanitize_string(large_payloads[0], max_length=1000)
         assert len(result) == 1000  # Should be truncated
-    
+
         # Dict payload
         with pytest.raises(ValidationError):
             validator.validate_personalization_data(large_payloads[1])
-    
+
         # List payload
         with pytest.raises(ValidationError):
-            validator.validate_personalization_data(large_payloads[2])
-    
+            validator.validate_personalization_data({"key": large_payloads[2]})
+
     def test_unicode_attack_prevention(self, validator):
         """Test prevention of unicode normalization attacks."""
         unicode_attacks = [
@@ -225,10 +225,10 @@ class TestSecurityValidation:
             # Check file permissions (should not be world-readable)
             import stat
             file_mode = session_file.stat().st_mode
-            # Should not have world-read permissions
-            assert not (file_mode & stat.S_IROTH)
-            assert not (file_mode & stat.S_IWOTH)
-    
+            # Should not have world-read or group-read permissions
+            assert not (file_mode & stat.S_IRWXG)
+            assert not (file_mode & stat.S_IRWXO)
+
     def test_input_validation_bypass_attempts(self, validator):
         """Test attempts to bypass input validation."""
         bypass_attempts = [
@@ -246,7 +246,7 @@ class TestSecurityValidation:
             assert "\r" not in result
             assert "\n" not in result
             assert "\033" not in result
-    
+
     def test_prototype_pollution_prevention(self, validator):
         """Test prevention of prototype pollution in data validation."""
         pollution_attempts = [

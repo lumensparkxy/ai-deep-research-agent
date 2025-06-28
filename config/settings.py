@@ -33,13 +33,13 @@ class Settings:
         self.base_path = Path(__file__).parent.parent
         self.config_path = config_path or self.base_path / "config" / "settings.yaml"
         self.env_path = env_path or self.base_path / ".env"
-        
+
         # Load configuration
         self._load_environment()
         self._load_yaml_config()
-        self._validate_required_settings()
         self._create_directories()
-        
+        self._validate_required_settings()
+
     def _load_environment(self) -> None:
         """Load environment variables from .env file if it exists."""
         if self.env_path.exists():
@@ -58,21 +58,17 @@ class Settings:
             raise ConfigurationError(f"Configuration file not found: {self.config_path}")
         except yaml.YAMLError as e:
             raise ConfigurationError(f"Invalid YAML configuration: {e}")
-    
+
     def _validate_required_settings(self) -> None:
         """Validate that all required settings are present."""
         required_env_vars = ["GEMINI_API_KEY"]
-        missing_vars = []
-        
-        for var in required_env_vars:
-            if not os.getenv(var):
-                missing_vars.append(var)
-        
+        missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+
         if missing_vars:
             raise ConfigurationError(
                 f"Missing required environment variables: {', '.join(missing_vars)}"
             )
-    
+
     def _create_directories(self) -> None:
         """Create required directories if they don't exist."""
         directories = [
@@ -107,6 +103,11 @@ class Settings:
     
     @property
     def debug_mode(self) -> bool:
+        env_val = os.getenv("DEBUG", "").lower()
+        if env_val in ("true", "1", "yes"):
+            return True
+        if env_val in ("false", "0", "no"):
+            return False
         return self.config.get("app", {}).get("debug", False)
     
     # API Settings
@@ -116,8 +117,8 @@ class Settings:
     
     @property
     def ai_model(self) -> str:
-        return self.config.get("ai", {}).get("model", "gemini-2.5-pro")
-    
+        return os.getenv("AI_MODEL", self.config.get("ai", {}).get("model", "gemini-1.5-pro-latest"))
+
     @property
     def enable_grounding(self) -> bool:
         env_val = os.getenv("ENABLE_GROUNDING", "true").lower()
@@ -201,7 +202,11 @@ class Settings:
     @property
     def report_depths(self) -> Dict[str, Any]:
         return self.config.get("output", {}).get("report_depths", {})
-    
+
+    def get_report_template(self, template_name: str) -> Optional[Dict[str, Any]]:
+        """Get a report template by name."""
+        return self.report_depths.get(template_name)
+
     # Logging Settings
     @property
     def log_level(self) -> str:
