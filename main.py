@@ -17,6 +17,13 @@ from config.settings import Settings, ConfigurationError
 from core.conversation import ConversationHandler
 from utils.session_manager import SessionManager
 
+# Import version from package
+try:
+    from __init__ import __version__
+except ImportError:
+    # Fallback if import fails
+    __version__ = "unknown"
+
 
 def setup_logging(settings: Settings) -> None:
     """Configure logging for the application."""
@@ -48,6 +55,11 @@ def main() -> int:
     """Main application entry point."""
     parser = argparse.ArgumentParser(
         description="Deep Research Agent - AI-powered decision support"
+    )
+    parser.add_argument(
+        "--version", 
+        action="version",
+        version=f"%(prog)s {__version__}"
     )
     parser.add_argument(
         "--config", 

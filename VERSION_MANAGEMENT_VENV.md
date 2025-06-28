@@ -210,3 +210,18 @@ $ ./release.sh release patch
 ```
 
 This system gives you complete control over version management while ensuring consistency across all project files and integration with your virtual environment.
+
+## Command Line Version Check
+
+Your application now supports the standard `--version` flag:
+
+```bash
+# Quick version check
+.venv/bin/python main.py --version
+# Output: main.py 0.1.0
+
+# Version also appears in help
+.venv/bin/python main.py --help
+```
+
+This makes it easy to verify which version is currently running without starting the full application.
