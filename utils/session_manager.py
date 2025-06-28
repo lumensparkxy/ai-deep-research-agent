@@ -222,7 +222,7 @@ class SessionManager:
             report_path: Path to generated report
         """
         # Validate report path
-        report_path = self.validator.validate_file_path(report_path)
+        report_path = self.validator.validate_file_path(report_path, project_root=self.settings.base_path)
         
         # Load existing session
         session_data = self.load_session(session_id)

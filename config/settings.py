@@ -44,8 +44,11 @@ class Settings:
 
     def _load_environment(self) -> None:
         """Load environment variables from .env file if it exists."""
-        # Do not load .env automatically to respect explicit environment overrides
-        self.logger.debug("Skipping .env file loading; environment variables must be set explicitly")
+        if self.env_path.exists():
+            load_dotenv(self.env_path)
+            self.logger.debug(f"Loaded environment variables from {self.env_path}")
+        else:
+            self.logger.debug(f"Environment file not found: {self.env_path}")
     
     def _load_yaml_config(self) -> None:
         """Load YAML configuration file."""

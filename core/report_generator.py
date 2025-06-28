@@ -222,6 +222,58 @@ This report was generated using a comprehensive 6-stage iterative research proce
 **Stages Completed**: {len(stages)}/6  
 **Research Quality**: Each finding includes source reliability scores and relevance assessments"""
     
+    def _clean_response_text(self, text: str) -> str:
+        """
+        Clean malformed JSON responses or raw text for display in reports.
+        
+        Args:
+            text: Raw text that might contain malformed JSON
+            
+        Returns:
+            Cleaned text suitable for display
+        """
+        if not text:
+            return "No summary available"
+            
+        # Check if text starts with JSON markdown
+        if text.startswith("```json"):
+            # Try to extract the JSON content and parse it
+            try:
+                # Remove markdown formatting
+                json_text = text.replace("```json\n", "").replace("```", "")
+                
+                # Try to parse as JSON
+                import json
+                parsed = json.loads(json_text)
+                
+                # Extract summary if it exists
+                if isinstance(parsed, dict) and "summary" in parsed:
+                    return parsed["summary"]
+                
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, try to extract summary manually
+                if '"summary":' in text:
+                    try:
+                        # Find the summary value
+                        start = text.find('"summary": "') + 12
+                        end = text.find('",', start)
+                        if end == -1:
+                            end = text.find('"', start)
+                        if start > 11 and end > start:
+                            summary = text[start:end]
+                            # Clean up escape characters
+                            return summary.replace('\\"', '"').replace('\\n', ' ')
+                    except:
+                        pass
+                
+                # Fallback: return first line without markdown
+                first_line = text.split('\n')[0]
+                if first_line.startswith("```"):
+                    return "Stage analysis completed"
+                return first_line
+        
+        return text
+
     def _build_research_overview(self, stages: List[Dict[str, Any]], config: Dict[str, Any]) -> str:
         """Build research process overview."""
         content = """## 🔍 Research Process Overview
@@ -231,12 +283,15 @@ This report was generated using a comprehensive 6-stage iterative research proce
         for i, stage in enumerate(stages[:6], 1):
             stage_name = stage.get("name", f"Stage {i}")
             findings = stage.get("findings", {})
-            summary = findings.get("summary", "Stage completed")
+            raw_summary = findings.get("summary", "Stage completed")
+            
+            # Clean the summary text
+            summary = self._clean_response_text(raw_summary)
             
             content += f"""
 
 **Stage {i}: {stage_name}**  
-{summary[:200]}{"..." if len(summary) > 200 else ""}"""
+{summary}"""
         
         return content
     
@@ -247,12 +302,16 @@ This report was generated using a comprehensive 6-stage iterative research proce
         for i, stage in enumerate(stages, 1):
             stage_name = stage.get("name", f"Stage {i}")
             findings = stage.get("findings", {})
+            raw_summary = findings.get("summary", "No summary available")
+            
+            # Clean the summary text
+            summary = self._clean_response_text(raw_summary)
             
             content += f"""
 
 ### Stage {i}: {stage_name}
 
-**Summary**: {findings.get("summary", "No summary available")}"""
+**Summary**: {summary}"""
             
             # Add key findings
             if "key_facts" in findings:
