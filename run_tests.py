@@ -35,6 +35,7 @@ def run_command(cmd, description):
 def main():
     """Main test runner function."""
     import argparse
+    import os
     
     parser = argparse.ArgumentParser(description="Test runner for Deep Research Agent")
     parser.add_argument(
@@ -122,7 +123,11 @@ def main():
     args = parser.parse_args()
     
     # Build pytest command
-    python_cmd = PROJECT_ROOT / ".venv" / "bin" / "python"
+    if os.getenv("CI"):
+        python_cmd = "python"
+    else:
+        python_cmd = PROJECT_ROOT / ".venv" / "bin" / "python"
+        
     cmd = [str(python_cmd), "-m", "pytest"]
     
     if args.verbose:
