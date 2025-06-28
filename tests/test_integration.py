@@ -46,9 +46,12 @@ class TestIntegration:
     def test_full_conversation_to_session_flow(self, integration_settings, temp_workspace):
         """Test complete flow from conversation to session creation."""
         # Mock the research engine to avoid real AI calls
-        with patch('core.conversation.ResearchEngine') as mock_engine_class:
+        with patch('core.research_engine.ResearchEngine') as mock_engine_class, \
+             patch('core.report_generator.ReportGenerator') as mock_generator_class:
             mock_engine = Mock()
             mock_engine_class.return_value = mock_engine
+            mock_generator = Mock()
+            mock_generator_class.return_value = mock_generator
             
             conversation_handler = ConversationHandler(integration_settings)
             
@@ -67,7 +70,7 @@ class TestIntegration:
                 
                 # This should create a session and save it
                 with patch.object(conversation_handler, 'display_progress'), \
-                     patch.object(conversation_handler, 'show_completion_message'):
+                     patch.object(conversation_handler, '_show_completion_message'):
                     
                     conversation_handler.start_interactive_session()
                     
@@ -171,7 +174,9 @@ class TestIntegration:
     def test_conversation_research_engine_integration(self, integration_settings):
         """Test ConversationHandler and ResearchEngine integration."""
         with patch('google.generativeai.configure'), \
-             patch('google.generativeai.GenerativeModel') as mock_model_class:
+             patch('google.generativeai.GenerativeModel') as mock_model_class, \
+             patch('core.research_engine.ResearchEngine'), \
+             patch('core.report_generator.ReportGenerator'):
             
             # Setup mocked AI model
             mock_model = Mock()
@@ -188,7 +193,7 @@ class TestIntegration:
             # Mock user input for complete flow
             with patch('builtins.input', side_effect=['Test research query', 'n', 'quick']):
                 with patch.object(conversation_handler, 'display_progress'), \
-                     patch.object(conversation_handler, 'show_completion_message'):
+                     patch.object(conversation_handler, '_show_completion_message'):
                     
                     # Should complete without errors
                     conversation_handler.start_interactive_session()

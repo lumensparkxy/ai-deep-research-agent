@@ -56,29 +56,29 @@ class TestConversationHandler:
     
     def test_classify_query_technology(self, conversation_handler):
         """Test query classification for technology category."""
-        tech_queries = [
-            "Best smartphone under $500",
-            "Which laptop is good for programming",
-            "Compare online project management software",
-            "Best digital marketing tools"
-        ]
+        tech_queries = {
+            "Best smartphone under $500": "technology",
+            "Which laptop is good for programming": "technology",
+            "Compare online project management software": "technology",
+            "Best digital marketing tools": "technology"
+        }
         
-        for query in tech_queries:
+        for query, expected_category in tech_queries.items():
             category = conversation_handler._classify_query(query)
-            assert category == "technology"
+            assert category == expected_category
     
     def test_classify_query_lifestyle(self, conversation_handler):
         """Test query classification for lifestyle category."""
-        lifestyle_queries = [
-            "Best travel destinations in Europe",
-            "Where to find good restaurants in SF",
-            "Fun hobbies for adults",
-            "Best entertainment streaming services"
-        ]
+        lifestyle_queries = {
+            "Best travel destinations in Europe": "lifestyle",
+            "Where to find good restaurants in SF": "lifestyle",
+            "Fun hobbies for adults": "lifestyle",
+            "Best entertainment streaming services": "lifestyle"
+        }
         
-        for query in lifestyle_queries:
+        for query, expected_category in lifestyle_queries.items():
             category = conversation_handler._classify_query(query)
-            assert category == "lifestyle"
+            assert category == expected_category
     
     def test_classify_query_other(self, conversation_handler):
         """Test query classification for other category."""
@@ -159,7 +159,7 @@ class TestConversationHandler:
         result = conversation_handler._ask_personalization()
         assert result is True
     
-    @patch('builtins.input', side_effect=['30', 'photography', '', '500'])
+    @patch('builtins.input', side_effect=['30', 'photography', '500', '6 months', 'USA'])
     def test_gather_personalization_health_category(self, mock_input, conversation_handler):
         """Test gathering personalization for health category."""
         query = "Best fitness routine for weight loss"
@@ -174,10 +174,13 @@ class TestConversationHandler:
             
             # Should contain user_info and constraints
             assert "user_info" in result
+            assert "preferences" in result
             assert "constraints" in result
             assert result["user_info"]["age"] == "30"
-            assert result["user_info"]["fitness_goal"] == "photography"
+            assert result["preferences"]["fitness_goal"] == "photography"
             assert result["constraints"]["budget"] == "500"
+            assert result["constraints"]["timeline"] == "6 months"
+            assert result["constraints"]["location"] == "USA"
     
     @patch('builtins.input', side_effect=[''])
     def test_ask_optional_empty_response(self, mock_input, conversation_handler):
@@ -330,9 +333,10 @@ class TestConversationHandler:
             result = conversation_handler._gather_personalization(query)
             
             assert "user_info" in result
+            assert "preferences" in result
             assert "constraints" in result
             assert result["user_info"]["income"] == "50000"
-            assert result["user_info"]["risk_tolerance"] == "moderate"
+            assert result["preferences"]["risk_tolerance"] == "moderate"
             assert result["constraints"]["budget"] == "10000"
             assert result["constraints"]["timeline"] == "6 months"
             assert result["constraints"]["location"] == "USA"
@@ -371,7 +375,8 @@ class TestConversationHandler:
             mock_create.return_value = {"session_id": "DRA_20250628_120000"}
             
             # This should handle the ImportError gracefully
-            conversation_handler.start_interactive_session()
+            with patch.dict('sys.modules', {'core.research_engine': None, 'core.report_generator': None}):
+                conversation_handler.start_interactive_session()
             
             output = mock_stdout.getvalue()
             assert "Starting Research Session" in output

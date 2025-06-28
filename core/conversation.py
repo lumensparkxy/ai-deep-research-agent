@@ -234,8 +234,8 @@ class ConversationHandler:
         
         health_keywords = ['health', 'exercise', 'diet', 'fitness', 'medical', 'workout', 'nutrition']
         finance_keywords = ['money', 'investment', 'budget', 'loan', 'credit', 'insurance', 'financial']
-        tech_keywords = ['software', 'app', 'computer', 'phone', 'technology', 'digital', 'online']
-        lifestyle_keywords = ['travel', 'food', 'restaurant', 'hobby', 'entertainment', 'shopping']
+        tech_keywords = ['software', 'app', 'computer', 'phone', 'technology', 'digital', 'online', 'smartphone', 'laptop', 'marketing']
+        lifestyle_keywords = ['travel', 'food', 'restaurant', 'hobby', 'entertainment', 'shopping', 'destinations', 'hobbies', 'services']
         
         if any(keyword in query_lower for keyword in health_keywords):
             return 'health'

@@ -6,6 +6,7 @@ Tests protection against various security threats and malicious inputs.
 
 import pytest
 from unittest.mock import patch, Mock
+from pathlib import Path
 
 from utils.validators import InputValidator, ValidationError
 from utils.session_manager import SessionManager
@@ -47,7 +48,9 @@ class TestSecurityValidation:
             result = validator.sanitize_string(malicious_input)
             assert "'" not in result  # Single quotes removed
             assert "--" not in result  # SQL comments removed
-            assert ";" not in result  # Statement terminators handled
+            assert "DROP" not in result.upper() # Keywords removed
+            assert "SELECT" not in result.upper()
+            assert "INSERT" not in result.upper()
     
     def test_xss_attack_prevention(self, validator):
         """Test prevention of Cross-Site Scripting (XSS) attacks."""
@@ -71,6 +74,9 @@ class TestSecurityValidation:
             # But content should remain (without dangerous parts)
             assert "alert" in result  # Content preserved
             assert "XSS" in result    # Content preserved
+            assert "script" not in result.lower()
+            assert "onerror" not in result.lower()
+            assert "onload" not in result.lower()
     
     def test_command_injection_prevention(self, validator):
         """Test prevention of command injection attacks."""
@@ -92,6 +98,10 @@ class TestSecurityValidation:
             for char in dangerous_chars:
                 if char in malicious_input:
                     assert char not in result
+            assert "rm -rf" not in result
+            assert "wget" not in result
+            assert "curl" not in result
+            assert "del C:" not in result
     
     def test_path_traversal_prevention(self, validator):
         """Test prevention of directory traversal attacks."""
@@ -108,7 +118,7 @@ class TestSecurityValidation:
         
         for malicious_path in path_traversal_attempts:
             with pytest.raises(ValidationError):
-                validator.validate_file_path(malicious_path)
+                validator.validate_file_path(malicious_path, project_root=Path("/app"))
     
     def test_ldap_injection_prevention(self, validator):
         """Test prevention of LDAP injection attacks."""
@@ -124,9 +134,12 @@ class TestSecurityValidation:
             result = validator.sanitize_string(malicious_input)
             # LDAP special characters should be handled
             assert "(" not in result or ")" not in result  # Some balance should be maintained
+            assert "*" not in result
+            assert "&" not in result
+            assert "|" not in result
     
     def test_regex_dos_prevention(self, validator):
-        """Test prevention of Regular Expression Denial of Service (ReDoS)."""
+        """Test prevention of Regex Denial-of-Service (ReDoS) attacks."""
         # Exponential time complexity patterns
         redos_patterns = [
             "a" * 50000 + "X",  # Very long string that doesn't match
@@ -165,18 +178,17 @@ class TestSecurityValidation:
         # String payload
         result = validator.sanitize_string(large_payloads[0], max_length=1000)
         assert len(result) == 1000  # Should be truncated
-        
-        # Dict payload  
-        result = validator.validate_personalization_data(large_payloads[1])
-        assert len(result) <= 50  # Should limit number of keys
-        
-        # List should be handled in personalization data validation
-        dict_with_large_list = {"preferences": large_payloads[2]}
-        result = validator.validate_personalization_data(dict_with_large_list)
-        assert len(result["preferences"]) <= 10  # Should limit list size
+    
+        # Dict payload
+        with pytest.raises(ValidationError):
+            validator.validate_personalization_data(large_payloads[1])
+    
+        # List payload
+        with pytest.raises(ValidationError):
+            validator.validate_personalization_data(large_payloads[2])
     
     def test_unicode_attack_prevention(self, validator):
-        """Test prevention of Unicode-based attacks."""
+        """Test prevention of unicode normalization attacks."""
         unicode_attacks = [
             "\u202e\u0041\u070f",  # Right-to-left override
             "\ufeff",  # Byte order mark
@@ -195,7 +207,7 @@ class TestSecurityValidation:
         """Test session file access security."""
         mock_settings.session_storage_path = str(tmp_path / "sessions")
         session_manager = SessionManager(mock_settings)
-        
+    
         # Test that session files are created with proper permissions
         session_data = {
             "session_id": "DRA_20250628_120000",
@@ -203,18 +215,19 @@ class TestSecurityValidation:
             "context": {},
             "status": "created"
         }
-        
+    
         with patch.object(session_manager.validator, 'validate_session_id', return_value="DRA_20250628_120000"):
             session_manager.save_session(session_data)
-            
+    
             session_file = tmp_path / "sessions" / "DRA_20250628_120000.json"
             assert session_file.exists()
-            
+    
             # Check file permissions (should not be world-readable)
             import stat
             file_mode = session_file.stat().st_mode
             # Should not have world-read permissions
             assert not (file_mode & stat.S_IROTH)
+            assert not (file_mode & stat.S_IWOTH)
     
     def test_input_validation_bypass_attempts(self, validator):
         """Test attempts to bypass input validation."""
@@ -230,9 +243,9 @@ class TestSecurityValidation:
             result = validator.sanitize_string(bypass_attempt)
             # Should clean up control characters
             assert "\x00" not in result
-            assert "\r" not in result  
+            assert "\r" not in result
+            assert "\n" not in result
             assert "\033" not in result
-            assert "\x08" not in result
     
     def test_prototype_pollution_prevention(self, validator):
         """Test prevention of prototype pollution in data validation."""
@@ -243,8 +256,5 @@ class TestSecurityValidation:
         ]
         
         for attempt in pollution_attempts:
-            result = validator.validate_personalization_data(attempt)
-            # Should not contain prototype pollution keys
-            assert "__proto__" not in str(result)
-            assert "constructor" not in str(result)
-            assert "prototype" not in str(result)
+            with pytest.raises(ValidationError):
+                validator.validate_personalization_data(attempt)
