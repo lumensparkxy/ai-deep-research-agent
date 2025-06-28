@@ -6,8 +6,8 @@ decision-making tasks through structured AI-powered research.
 """
 
 __version__ = "0.1.0"
-__author__ = "Your Name"
-__email__ = "your.email@example.com"
+__author__ = "lumensparkxy"
+__email__ = "neophilex@gmail.com"
 __description__ = "AI-powered decision support through multi-stage iterative research"
 
 # Make version available at package level
