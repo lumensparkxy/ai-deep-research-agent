@@ -347,3 +347,57 @@ class SessionManager:
         
         self.logger.info(f"Cleaned up {deleted_count} old sessions")
         return deleted_count
+
+    def cleanup_incomplete_sessions(self) -> int:
+        """
+        Clean up sessions that are truly incomplete (corrupted or invalid).
+        
+        Returns:
+            Number of sessions deleted
+        """
+        deleted_count = 0
+        session_files = self.session_dir.glob("DRA_*.json")
+        
+        for session_file in session_files:
+            try:
+                # Try to load the session
+                with open(session_file, 'r') as f:
+                    session_data = json.load(f)
+                
+                # Check if session has minimum required fields
+                required_fields = ["session_id", "created_at", "query", "status"]
+                if not all(field in session_data for field in required_fields):
+                    self.logger.warning(f"Session file missing required fields: {session_file}")
+                    session_file.unlink()
+                    deleted_count += 1
+                    continue
+                
+                # Check if session is in an impossible state (created but no further progress for >24h)
+                from datetime import datetime, timedelta
+                try:
+                    created_at = datetime.fromisoformat(session_data["created_at"].replace('Z', '+00:00'))
+                    if (session_data.get("status") == "created" and 
+                        datetime.now() - created_at > timedelta(hours=24)):
+                        self.logger.info(f"Cleaning up stale 'created' session: {session_data['session_id']}")
+                        session_file.unlink()
+                        deleted_count += 1
+                        continue
+                except (ValueError, TypeError):
+                    # Invalid timestamp format
+                    self.logger.warning(f"Session with invalid timestamp: {session_file}")
+                    session_file.unlink()
+                    deleted_count += 1
+                    continue
+                        
+            except (OSError, json.JSONDecodeError) as e:
+                self.logger.warning(f"Corrupted session file deleted: {session_file}: {e}")
+                try:
+                    session_file.unlink()
+                    deleted_count += 1
+                except OSError:
+                    pass  # File might already be deleted
+                continue
+        
+        if deleted_count > 0:
+            self.logger.info(f"Cleaned up {deleted_count} incomplete/corrupted sessions")
+        return deleted_count
