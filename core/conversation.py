@@ -6,10 +6,12 @@ Manages user interaction and guides through the research process.
 import logging
 import re
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 
 from config.settings import Settings
 from utils.session_manager import SessionManager
 from utils.validators import InputValidator, ValidationError
+from .dynamic_personalization import DynamicPersonalizationEngine
 
 
 class ConversationHandler:
@@ -27,9 +29,20 @@ class ConversationHandler:
         self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
         
+        # Initialize Dynamic Personalization Engine
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.gemini_api_key)
+            gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+            self.personalization_engine = DynamicPersonalizationEngine(gemini_client)
+        except Exception as e:
+            self.logger.warning(f"Could not initialize personalization engine: {e}")
+            self.personalization_engine = None
+        
         # Conversation state
         self.current_session = None
         self.user_context = {}
+        self.current_conversation_state = None
     
     def start_interactive_session(self) -> None:
         """Start an interactive research session with the user."""
@@ -46,9 +59,11 @@ class ConversationHandler:
             # Gather context if requested
             context = {"personalize": personalize}
             if personalize:
-                context.update(self._gather_personalization(query))
+                # Create a temporary session ID for personalization
+                temp_session_id = f"temp_{int(datetime.now().timestamp() * 1000)}"
+                context.update(self._gather_personalization(query, temp_session_id))
             
-            # Create session
+            # Create session with complete context
             self.current_session = self.session_manager.create_session(query, context)
             session_id = self.current_session["session_id"]
             
@@ -197,9 +212,128 @@ class ConversationHandler:
             except (KeyboardInterrupt, EOFError):
                 raise
     
-    def _gather_personalization(self, query: str) -> Dict[str, Any]:
+    def _gather_personalization(self, query: str, temp_session_id: str = None) -> Dict[str, Any]:
         """
-        Gather personalization information based on query category.
+        Gather personalization information using dynamic AI-driven conversation.
+        
+        Args:
+            query: User's research query
+            
+        Returns:
+            Dictionary of personalization data
+        """
+        if not self.personalization_engine:
+            # Fallback to static questions if personalization engine not available
+            return self._gather_static_personalization(query)
+        
+        print("\n🤖 Let me ask you some intelligent questions to personalize your research:")
+        print("   I'll adapt my questions based on your responses for better recommendations.")
+        print()
+        
+        try:
+            # Initialize dynamic conversation
+            session_id = temp_session_id or f"personalization_{int(datetime.now().timestamp() * 1000)}"
+            conversation_state = self.personalization_engine.initialize_conversation(query, session_id)
+            self.current_conversation_state = conversation_state
+            
+            # Conduct intelligent conversation with dynamic question limit
+            # The personalization engine will determine when to stop based on information quality
+            conversation_state = self.personalization_engine.initialize_conversation(query, session_id)
+            self.current_conversation_state = conversation_state
+            
+            context = {"personalize": True}
+            
+            question_count = 0
+            max_absolute_questions = 10  # Safety limit to prevent infinite loops
+            
+            while question_count < max_absolute_questions:
+                # Generate next intelligent question
+                question = self.personalization_engine.generate_next_question(conversation_state)
+                
+                if not question:
+                    print("✅ I have enough information to provide personalized recommendations!")
+                    break
+                
+                # Ask the question
+                print(f"\n💭 Question {question_count + 1}:")
+                try:
+                    response = input(f"{question}\n➤ ").strip()
+                    
+                    if not response:
+                        print("   (Skipped)")
+                        question_count += 1
+                        continue
+                    
+                    # Process the response
+                    result = self.personalization_engine.process_user_response(
+                        conversation_state, question, response
+                    )
+                    
+                    # Show brief acknowledgment
+                    if result.get('extracted_info'):
+                        print("   ✓ Got it! This helps me understand your needs better.")
+                    
+                    question_count += 1
+                    
+                except (KeyboardInterrupt, EOFError):
+                    print("\n   Personalization cancelled by user")
+                    break
+            
+            # Get conversation summary
+            summary = self.personalization_engine.get_conversation_summary(conversation_state)
+            
+            # Convert to expected format
+            extracted_context = self._convert_conversation_to_context(conversation_state, summary)
+            
+            print(f"\n🎯 Personalization complete! Gathered insights on {len(conversation_state.user_profile)} key areas.")
+            
+            return extracted_context
+            
+        except Exception as e:
+            self.logger.error(f"Error in dynamic personalization: {e}")
+            print("🔄 Falling back to standard questions...")
+            return self._gather_static_personalization(query)
+    
+    def _convert_conversation_to_context(self, conversation_state, summary: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert conversation state to expected context format."""
+        context = {"personalize": True}
+        
+        # Extract user information
+        user_info = {}
+        constraints = {}
+        preferences = {}
+        
+        # Categorize the gathered profile information
+        for key, value in conversation_state.user_profile.items():
+            if key.lower() in ['age', 'weight', 'height', 'income', 'budget', 'experience_level']:
+                user_info[key] = value
+            elif key.lower() in ['timeline', 'location', 'constraints', 'deadline']:
+                constraints[key] = value
+            else:
+                preferences[key] = value
+        
+        # Add structured context
+        if user_info:
+            context['user_info'] = user_info
+        if constraints:
+            context['constraints'] = constraints
+        if preferences:
+            context['preferences'] = preferences
+        
+        # Add intelligent insights
+        context['conversation_insights'] = {
+            'priority_factors': conversation_state.priority_factors,
+            'confidence_scores': conversation_state.confidence_scores,
+            'completion_confidence': conversation_state.completion_confidence,
+            'key_insights': summary.get('key_insights', []),
+            'research_recommendations': summary.get('research_recommendations', [])
+        }
+        
+        return context
+    
+    def _gather_static_personalization(self, query: str) -> Dict[str, Any]:
+        """
+        Fallback method for static personalization questions.
         
         Args:
             query: User's research query
