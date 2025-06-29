@@ -7,6 +7,8 @@ AI-powered decision support through multi-stage iterative research.
 import sys
 import logging
 import argparse
+import signal
+import json
 from pathlib import Path
 
 # Add project root to path for imports
@@ -23,6 +25,61 @@ try:
 except ImportError:
     # Fallback if import fails
     __version__ = "unknown"
+
+# Global variables for signal handling
+_current_session_manager = None
+_current_session_id = None
+
+
+def signal_handler(signum, frame):
+    """Handle SIGINT and SIGTERM by marking current session as interrupted."""
+    global _current_session_manager, _current_session_id
+    
+    signal_name = "SIGINT" if signum == signal.SIGINT else "SIGTERM"
+    print(f"\n\n⚠️  Received {signal_name}. Gracefully shutting down...")
+    
+    # Mark current session as interrupted if one exists
+    if _current_session_manager and _current_session_id:
+        try:
+            # Load session directly from file to avoid validator issues
+            session_file = _current_session_manager.session_dir / f"{_current_session_id}.json"
+            if session_file.exists():
+                with open(session_file, 'r') as f:
+                    session_data = json.load(f)
+                
+                if session_data.get("status") not in ["completed", "interrupted"]:
+                    session_data["status"] = "interrupted"
+                    
+                    # Save directly to file
+                    with open(session_file, 'w') as f:
+                        json.dump(session_data, f, indent=2)
+                    
+                    print(f"✅ Session {_current_session_id} marked as interrupted")
+        except Exception as e:
+            print(f"⚠️  Could not mark session as interrupted: {e}")
+    
+    print("👋 Research session interrupted. Goodbye!")
+    sys.exit(0)
+
+
+def setup_signal_handlers():
+    """Setup signal handlers for graceful shutdown."""
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+
+def set_current_session(session_manager, session_id):
+    """Set the current active session for signal handling."""
+    global _current_session_manager, _current_session_id
+    _current_session_manager = session_manager
+    _current_session_id = session_id
+
+
+def clear_current_session():
+    """Clear the current active session."""
+    global _current_session_manager, _current_session_id
+    _current_session_manager = None
+    _current_session_id = None
 
 
 def setup_logging(settings: Settings) -> None:
@@ -90,6 +147,9 @@ def main() -> int:
     args = parser.parse_args()
     
     try:
+        # Setup signal handlers for graceful shutdown
+        setup_signal_handlers()
+        
         # Initialize configuration
         settings = Settings(config_path=args.config, env_path=args.env)
         
@@ -103,9 +163,13 @@ def main() -> int:
         
         logger.info(f"Starting {settings.app_name} v{settings.app_version}")
         
+        # Initialize session manager for cleanup and signal handling
+        session_manager = SessionManager(settings)
+        
+        # Clean up any truly incomplete sessions on startup
+        session_manager.cleanup_incomplete_sessions()
         # Handle utility commands
         if args.list_sessions:
-            session_manager = SessionManager(settings)
             sessions = session_manager.list_sessions()
             
             if not sessions:
@@ -116,17 +180,20 @@ def main() -> int:
             print("-" * settings.separator_width)
             
             for session in sessions:
+                status = session['status']
+                # Add visual indicator for interrupted sessions
+                status_display = f"❌ {status}" if status == "interrupted" else status
+                
                 print(f"ID: {session['session_id']}")
                 print(f"Created: {session['created_at']}")
                 print(f"Query: {session['query']}")
-                print(f"Status: {session['status']}")
+                print(f"Status: {status_display}")
                 print(f"Confidence: {session['confidence_score']:.{settings.confidence_decimal_places}f}")
                 print("-" * settings.separator_width)
             
             return 0
         
         if args.cleanup is not None:
-            session_manager = SessionManager(settings)
             deleted_count = session_manager.cleanup_old_sessions(args.cleanup)
             print(f"Cleaned up {deleted_count} sessions older than {args.cleanup} days.")
             return 0

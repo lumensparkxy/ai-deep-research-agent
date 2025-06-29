@@ -52,6 +52,14 @@ class ConversationHandler:
             self.current_session = self.session_manager.create_session(query, context)
             session_id = self.current_session["session_id"]
             
+            # Register session for signal handling
+            try:
+                from main import set_current_session
+                set_current_session(self.session_manager, session_id)
+            except ImportError:
+                # This might happen in tests or other contexts
+                pass
+            
             print(f"\n🔬 Starting Research Session: {session_id}")
             print("=" * 60)
             
@@ -87,6 +95,13 @@ class ConversationHandler:
                 # Show completion message
                 self._show_completion_message(session_id, report_path, research_results)
                 
+                # Clear session tracking as research completed successfully
+                try:
+                    from main import clear_current_session
+                    clear_current_session()
+                except ImportError:
+                    pass
+                
             except ImportError:
                 # Modules not yet created - show placeholder message
                 print("🚧 Core research modules are being implemented...")
@@ -95,9 +110,29 @@ class ConversationHandler:
                 print(f"Query: {query}")
                 print(f"Context: {context}")
                 
+                # Clear session tracking as foundation mode completed
+                try:
+                    from main import clear_current_session
+                    clear_current_session()
+                except ImportError:
+                    pass
+                
         except (KeyboardInterrupt, EOFError):
+            # Clear session tracking, but don't mark as interrupted here
+            # as the signal handler will take care of that
+            try:
+                from main import clear_current_session
+                clear_current_session()
+            except ImportError:
+                pass
             print("\n\n👋 Research session cancelled. Goodbye!")
         except Exception as e:
+            # Clear session tracking on error
+            try:
+                from main import clear_current_session
+                clear_current_session()
+            except ImportError:
+                pass
             self.logger.error(f"Error in interactive session: {e}")
             print(f"\n❌ An error occurred: {e}")
             print("The session has been saved and can be resumed later.")
