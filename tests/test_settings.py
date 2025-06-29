@@ -32,7 +32,9 @@ class TestSettings:
 
     def test_settings_missing_api_key(self):
         """Test Settings raises error when GEMINI_API_KEY is missing."""
-        with patch.dict(os.environ, {}, clear=True):
+        # Mock dotenv loading to prevent it from loading the .env file
+        with patch('config.settings.load_dotenv'), \
+             patch.dict(os.environ, {}, clear=True):
             # Temporarily remove the variable if it was set by a previous test in the same run
             if "GEMINI_API_KEY" in os.environ:
                 del os.environ["GEMINI_API_KEY"]

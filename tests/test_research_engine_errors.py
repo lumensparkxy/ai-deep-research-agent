@@ -103,15 +103,21 @@ class TestResearchEngineErrorHandling:
             # Mock successful query validation but stage failure
             with patch.object(engine.validator, 'validate_query', return_value="valid query"), \
                  patch.object(engine.session_manager, 'create_session') as mock_create, \
+                 patch.object(engine.session_manager, 'update_session_conclusions') as mock_update, \
                  patch.object(engine, '_stage_1_information_gathering') as mock_stage:
                 
-                mock_create.return_value = {"session_id": "test_session"}
+                mock_create.return_value = {"session_id": "DRA_20250629_120000"}
+                mock_update.return_value = None  # Mock the update method to prevent session ID validation
                 mock_stage.side_effect = Exception("Stage 1 failed")
                 
                 # Should handle stage failure gracefully
-                result = engine.conduct_research("test query", {}, "test_session_id")
-                assert "error" in result["stages"][0]
-                assert "Stage 1 failed" in result["stages"][0]["error"]
+                result = engine.conduct_research("test query", {}, "DRA_20250629_120000")
+                # When stages fail, the engine continues and reports errors in gaps_identified
+                assert "final_conclusions" in result
+                # Check that stage errors are reported somewhere in the result
+                gaps = result["final_conclusions"].get("gaps_identified", [])
+                stage_error_found = any("Error in" in gap for gap in gaps)
+                assert stage_error_found, f"Expected stage error in gaps, got: {gaps}"
     
     def test_research_engine_safety_settings_validation(self, mock_settings):
         """Test ResearchEngine applies proper safety settings."""

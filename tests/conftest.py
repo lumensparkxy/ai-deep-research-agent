@@ -66,10 +66,19 @@ def mock_settings(temp_dir):
     
     # Add properties needed for research engine tests
     settings.gemini_api_key = "test_key"
-    settings.ai_model = "gemini-2.0-flash-exp"
+    settings.ai_model = "gemini-2.5-flash"
     settings.ai_max_tokens = 4000
     settings.ai_temperature = 0.7
     settings.ai_safety_settings = {}
+    
+    # Add missing research engine properties that caused the TypeError
+    settings.rate_limit_delay = 2.0  # Float value needed for time.sleep()
+    settings.exponential_backoff_base = 2  # Integer for backoff calculation
+    settings.min_confidence_fallback = 0.1  # Float for fallback confidence
+    settings.max_gaps_per_stage = 5  # Integer for limiting gaps display
+    settings.retry_delay = 1.0  # Float for retry delay
+    settings.fallback_retry_delay = 2.0  # Float for fallback retry delay
+    settings.progress_bar_length = 40  # Integer for progress bar display
     
     return settings
 
