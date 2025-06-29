@@ -176,7 +176,7 @@ class TestInputValidator:
         """Test prevention of directory traversal attacks."""
         dangerous_paths = [
             "../../../etc/passwd",
-            "..\..\windows\system32",
+            "..\\..\\windows\\system32",
         ]
         
         for path in dangerous_paths:

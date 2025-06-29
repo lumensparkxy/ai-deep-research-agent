@@ -24,15 +24,6 @@ class TestSecurityValidation:
         """Create a validator instance for testing."""
         return InputValidator(mock_settings)
     
-    @pytest.fixture
-    def mock_settings(self):
-        """Mock settings for testing."""
-        settings = Mock()
-        settings.session_storage_path = "/tmp/sessions"
-        settings.report_output_path = "/tmp/reports"
-        settings.app_name = "Test Agent"
-        return settings
-    
     def test_sql_injection_prevention(self, validator):
         """Test prevention of SQL injection attempts."""
         sql_injection_attempts = [

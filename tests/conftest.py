@@ -43,6 +43,34 @@ def mock_settings(temp_dir):
         "Risk Assessment",
         "Final Synthesis"
     ]
+    
+    # Validation settings - provide actual integer values instead of Mock objects
+    settings.string_max_length = 1000
+    settings.query_max_length = 500
+    settings.query_min_length = 5
+    settings.personalization_max_keys = 100
+    settings.personalization_key_max_length = 50
+    settings.personalization_value_max_length = 200
+    settings.personalization_list_item_max_length = 100
+    settings.personalization_list_max_size = 10
+    settings.personalization_nested_list_max_size = 50
+    settings.stage_count = 6
+    settings.fallback_max_retries = 3
+    settings.max_retries = 3
+    settings.session_file_permissions = "600"
+    settings.default_session_limit = 50
+    settings.query_display_length = 100
+    
+    # Add base_path property for session manager tests
+    settings.base_path = temp_dir
+    
+    # Add properties needed for research engine tests
+    settings.gemini_api_key = "test_key"
+    settings.ai_model = "gemini-2.0-flash-exp"
+    settings.ai_max_tokens = 4000
+    settings.ai_temperature = 0.7
+    settings.ai_safety_settings = {}
+    
     return settings
 
 

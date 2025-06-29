@@ -14,19 +14,6 @@ from utils.validators import ValidationError
 class TestResearchEngineErrorHandling:
     """Test cases for ResearchEngine error handling and safety."""
     
-    @pytest.fixture
-    def mock_settings(self):
-        """Mock settings for testing."""
-        settings = Mock()
-        settings.gemini_api_key = "test_key"
-        settings.ai_model = "gemini-2.0-flash-exp"
-        settings.session_storage_path = "/tmp/sessions"
-        settings.report_output_path = "/tmp/reports"
-        settings.ai_max_tokens = 4000
-        settings.ai_temperature = 0.7
-        settings.ai_safety_settings = {}
-        return settings
-    
     def test_research_engine_initialization_failure(self, mock_settings):
         """Test ResearchEngine handles AI initialization failures."""
         with patch('google.generativeai.configure') as mock_configure, \
