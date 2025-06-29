@@ -132,7 +132,7 @@ class TestIntegration:
     
     def test_validator_session_data_integration(self, integration_settings):
         """Test validator properly handles complex session data."""
-        validator = InputValidator()
+        validator = InputValidator(integration_settings)
         session_manager = SessionManager(integration_settings)
         
         # Complex realistic data

@@ -20,9 +20,9 @@ class TestSecurityValidation:
     """Test cases for security vulnerabilities and attack prevention."""
     
     @pytest.fixture
-    def validator(self):
-        """Create validator instance for testing."""
-        return InputValidator()
+    def validator(self, mock_settings):
+        """Create a validator instance for testing."""
+        return InputValidator(mock_settings)
     
     @pytest.fixture
     def mock_settings(self):

@@ -44,10 +44,11 @@ def setup_logging(settings: Settings) -> None:
 
 def print_banner(settings: Settings) -> None:
     """Print application banner."""
-    print("=" * 60)
+    banner_width = settings.banner_width
+    print("=" * banner_width)
     print(f"🤖 {settings.app_name} v{settings.app_version}")
     print("Universal Decision Support through AI-Powered Research")
-    print("=" * 60)
+    print("=" * banner_width)
     print()
 
 
@@ -112,15 +113,15 @@ def main() -> int:
                 return 0
             
             print(f"Recent Research Sessions ({len(sessions)}):")
-            print("-" * 80)
+            print("-" * settings.separator_width)
             
             for session in sessions:
                 print(f"ID: {session['session_id']}")
                 print(f"Created: {session['created_at']}")
                 print(f"Query: {session['query']}")
                 print(f"Status: {session['status']}")
-                print(f"Confidence: {session['confidence_score']:.2f}")
-                print("-" * 80)
+                print(f"Confidence: {session['confidence_score']:.{settings.confidence_decimal_places}f}")
+                print("-" * settings.separator_width)
             
             return 0
         

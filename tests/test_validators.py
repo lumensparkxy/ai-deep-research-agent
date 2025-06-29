@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch, Mock
 
 from utils.validators import InputValidator, ValidationError
+from config.settings import Settings
 
 
 @pytest.mark.priority1
@@ -18,9 +19,9 @@ class TestInputValidator:
     """Test cases for InputValidator functionality."""
     
     @pytest.fixture
-    def validator(self):
+    def validator(self, mock_settings):
         """Create a validator instance for testing."""
-        return InputValidator()
+        return InputValidator(mock_settings)
     
     def test_validator_initialization(self, validator):
         """Test InputValidator initializes correctly."""

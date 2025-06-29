@@ -24,7 +24,7 @@ class ConversationHandler:
         """
         self.settings = settings
         self.session_manager = SessionManager(settings)
-        self.validator = InputValidator()
+        self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
         
         # Conversation state

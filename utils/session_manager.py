@@ -25,7 +25,7 @@ class SessionManager:
             settings: Configuration settings instance
         """
         self.settings = settings or get_settings()
-        self.validator = InputValidator()
+        self.validator = InputValidator(self.settings)
         self.logger = logging.getLogger(__name__)
         
         # Ensure session directory exists
@@ -115,7 +115,8 @@ class SessionManager:
                 json.dump(session_data, f, indent=2, ensure_ascii=False)
             
             # Set secure file permissions
-            os.chmod(session_file, 0o600)
+            permission_octal = int(self.settings.session_file_permissions, 8)
+            os.chmod(session_file, permission_octal)
 
             self.logger.debug(f"Saved session: {session_id}")
             
@@ -235,16 +236,19 @@ class SessionManager:
         
         self.logger.debug(f"Updated session {session_id} with report path: {report_path}")
     
-    def list_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_sessions(self, limit: int = None) -> List[Dict[str, Any]]:
         """
         List all sessions with basic metadata.
         
         Args:
-            limit: Maximum number of sessions to return
+            limit: Maximum number of sessions to return (uses setting default if None)
             
         Returns:
             List of session metadata dictionaries
         """
+        if limit is None:
+            limit = self.settings.default_session_limit
+        
         sessions = []
         session_files = sorted(self.session_dir.glob("DRA_*.json"), reverse=True)
         
@@ -257,7 +261,7 @@ class SessionManager:
                 metadata = {
                     "session_id": session_data.get("session_id"),
                     "created_at": session_data.get("created_at"),
-                    "query": session_data.get("query", "")[:100],  # Truncate query
+                    "query": session_data.get("query", "")[:self.settings.query_display_length],  # Truncate query
                     "status": session_data.get("status", "unknown"),
                     "confidence_score": session_data.get("research_results", {}).get("confidence_score", 0.0)
                 }

@@ -18,7 +18,9 @@ class ValidationError(Exception):
 class InputValidator:
     """Handles validation and sanitization of user inputs."""
     
-    def __init__(self):
+    def __init__(self, settings=None):
+        from config.settings import get_settings
+        self.settings = settings or get_settings()
         self.logger = logging.getLogger(__name__)
         
         # Common patterns for validation
@@ -36,17 +38,19 @@ class InputValidator:
         self.ldap_blacklist = re.compile(r'[\*\(\)\\]', re.IGNORECASE)
         self.control_chars_blacklist = re.compile(r'[\x00-\x1f\x7f]')
 
-    def sanitize_string(self, text: str, max_length: int = 1000) -> str:
+    def sanitize_string(self, text: str, max_length: int = None) -> str:
         """
         Sanitize string input by removing dangerous characters and limiting length.
         
         Args:
             text: Input string to sanitize
-            max_length: Maximum allowed length
+            max_length: Maximum allowed length (uses setting default if None)
             
         Returns:
             Sanitized string
         """
+        if max_length is None:
+            max_length = self.settings.string_max_length
         if not isinstance(text, str):
             text = str(text)
 
@@ -88,14 +92,14 @@ class InputValidator:
             raise ValidationError("Query must be a non-empty string")
         
         # Sanitize
-        query = self.sanitize_string(query, max_length=500)
+        query = self.sanitize_string(query, max_length=self.settings.query_max_length)
         
         # Validate length
-        if len(query) < 5:
-            raise ValidationError("Query must be at least 5 characters long")
+        if len(query) < self.settings.query_min_length:
+            raise ValidationError(f"Query must be at least {self.settings.query_min_length} characters long")
         
-        if len(query) > 500:
-            raise ValidationError("Query must be less than 500 characters")
+        if len(query) > self.settings.query_max_length:
+            raise ValidationError(f"Query must be less than {self.settings.query_max_length} characters")
         
         # Check for meaningful content
         if not re.search(r'[a-zA-Z]', query):
@@ -187,8 +191,8 @@ class InputValidator:
         if not isinstance(data, dict):
             raise ValidationError("Personalization data must be a dictionary")
 
-        if len(data) > 100:  # Limit number of keys
-            raise ValidationError("Personalization data cannot have more than 100 keys.")
+        if len(data) > self.settings.personalization_max_keys:  # Limit number of keys
+            raise ValidationError(f"Personalization data cannot have more than {self.settings.personalization_max_keys} keys.")
 
         validated_data = {}
 
@@ -197,13 +201,13 @@ class InputValidator:
                 raise ValidationError(f"Invalid key in personalization data: {key}")
 
             # Sanitize key
-            clean_key = self.sanitize_string(key, max_length=50)
+            clean_key = self.sanitize_string(key, max_length=self.settings.personalization_key_max_length)
             if not clean_key:
                 continue
             
             # Handle different value types
             if isinstance(value, str):
-                clean_value = self.sanitize_string(value, max_length=200)
+                clean_value = self.sanitize_string(value, max_length=self.settings.personalization_value_max_length)
             elif isinstance(value, (int, float)):
                 clean_value = value
             elif isinstance(value, bool):
@@ -211,13 +215,13 @@ class InputValidator:
             elif isinstance(value, dict):
                 clean_value = self.validate_personalization_data(value)
             elif isinstance(value, list):
-                if len(value) > 50: # Limit list size
+                if len(value) > self.settings.personalization_nested_list_max_size: # Limit list size
                     raise ValidationError(f"List in personalization data for key '{clean_key}' is too long.")
-                clean_value = [self.sanitize_string(str(item), max_length=100)
-                              for item in value if item][:10]  # Limit list size
+                clean_value = [self.sanitize_string(str(item), max_length=self.settings.personalization_list_item_max_length)
+                              for item in value if item][:self.settings.personalization_list_max_size]  # Limit list size
             else:
                 # Convert to string and sanitize
-                clean_value = self.sanitize_string(str(value), max_length=200)
+                clean_value = self.sanitize_string(str(value), max_length=self.settings.personalization_value_max_length)
             
             if clean_value != '' and clean_value is not None:
                 validated_data[clean_key] = clean_value
@@ -311,13 +315,13 @@ class InputValidator:
         
         return score
     
-    def validate_research_stage(self, stage: int, max_stages: int = 6) -> int:
+    def validate_research_stage(self, stage: int, max_stages: int = None) -> int:
         """
         Validate research stage number.
         
         Args:
             stage: Stage number
-            max_stages: Maximum allowed stage number
+            max_stages: Maximum allowed stage number (uses setting default if None)
             
         Returns:
             Validated stage number
@@ -325,6 +329,8 @@ class InputValidator:
         Raises:
             ValidationError: If stage is invalid
         """
+        if max_stages is None:
+            max_stages = self.settings.stage_count
         try:
             stage = int(stage)
         except (TypeError, ValueError):

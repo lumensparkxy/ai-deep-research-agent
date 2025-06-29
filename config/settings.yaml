@@ -6,6 +6,9 @@ research:
   default_depth: "standard"
   max_sources: 10
   timeout_seconds: 300
+  max_gaps_per_stage: 10
+  min_confidence_fallback: 0.1
+  stage_count: 6
   stages:
     - "Information Gathering"
     - "Validation & Fact-Checking"
@@ -21,28 +24,73 @@ ai:
   max_retries: 3
   retry_delay: 1.0
   rate_limit_delay: 2.0
+  exponential_backoff_base: 2
+  fallback_retry_delay: 1.0
+  fallback_max_retries: 3
 
 output:
   report_formats: ["markdown"]
   include_sources: true
   include_timestamps: true
   include_confidence_scores: true
+  filename_query_max_length: 50
+  source_extract_preview_length: 150
+  facts_display_limit: 5
+  evidence_display_limit: 5
   report_depths:
     quick: 
       pages: "2-3"
       sections: ["executive_summary", "key_recommendations", "sources"]
+      max_evidence: 5
+      max_recommendations: 3
+      max_facts_per_stage: 5
+      max_insights_per_section: 10
     standard:
       pages: "5-7"
       sections: ["executive_summary", "research_overview", "detailed_analysis", "recommendations", "implementation", "sources"]
+      max_evidence: 15
+      max_recommendations: 8
+      max_facts_per_stage: 10
+      max_insights_per_section: 15
     detailed:
       pages: "10+"
       sections: ["executive_summary", "methodology", "stage_analysis", "detailed_findings", "comparative_analysis", "recommendations", "implementation", "risk_assessment", "success_metrics", "sources"]
+      max_evidence: 30
+      max_recommendations: 15
+      max_facts_per_stage: 20
+      max_insights_per_section: 30
+  content_limits:
+    pros_cons_display_limit: 3
+    priority_items_limit: 3
+    category_items_limit: 10
+    options_comparison_limit: 5
+    standout_recommendations_limit: 3
 
 storage:
   session_format: "json"
   report_format: "markdown"
   backup_enabled: false
   cleanup_days: 30
+  default_session_limit: 50
+  query_display_length: 100
+  session_file_permissions: "600"
+
+validation:
+  query_min_length: 5
+  query_max_length: 500
+  string_max_length: 1000
+  personalization_key_max_length: 50
+  personalization_value_max_length: 200
+  personalization_list_item_max_length: 100
+  personalization_list_max_size: 10
+  personalization_max_keys: 100
+  personalization_nested_list_max_size: 50
+
+ui:
+  progress_bar_length: 40
+  banner_width: 60
+  separator_width: 80
+  confidence_decimal_places: 1
 
 personalization:
   categories:

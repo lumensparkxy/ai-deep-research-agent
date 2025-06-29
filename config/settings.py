@@ -156,6 +156,18 @@ class Settings:
     def rate_limit_delay(self) -> float:
         return self.config.get("ai", {}).get("rate_limit_delay", 2.0)
     
+    @property
+    def exponential_backoff_base(self) -> int:
+        return self.config.get("ai", {}).get("exponential_backoff_base", 2)
+    
+    @property
+    def fallback_retry_delay(self) -> float:
+        return self.config.get("ai", {}).get("fallback_retry_delay", 1.0)
+    
+    @property
+    def fallback_max_retries(self) -> int:
+        return self.config.get("ai", {}).get("fallback_max_retries", 3)
+    
     # Research Settings
     @property
     def research_depth(self) -> str:
@@ -182,6 +194,18 @@ class Settings:
             "Final Conclusions"
         ])
     
+    @property
+    def max_gaps_per_stage(self) -> int:
+        return self.config.get("research", {}).get("max_gaps_per_stage", 10)
+    
+    @property
+    def min_confidence_fallback(self) -> float:
+        return self.config.get("research", {}).get("min_confidence_fallback", 0.1)
+    
+    @property
+    def stage_count(self) -> int:
+        return self.config.get("research", {}).get("stage_count", 6)
+    
     # Storage Settings
     @property
     def session_storage_path(self) -> str:
@@ -199,6 +223,18 @@ class Settings:
     def report_format(self) -> str:
         return self.config.get("storage", {}).get("report_format", "markdown")
     
+    @property
+    def default_session_limit(self) -> int:
+        return self.config.get("storage", {}).get("default_session_limit", 50)
+    
+    @property
+    def query_display_length(self) -> int:
+        return self.config.get("storage", {}).get("query_display_length", 100)
+    
+    @property
+    def session_file_permissions(self) -> str:
+        return self.config.get("storage", {}).get("session_file_permissions", "600")
+    
     # Output Settings
     @property
     def include_sources(self) -> bool:
@@ -215,6 +251,32 @@ class Settings:
         return self.config.get("output", {}).get("include_confidence_scores", True)
     
     @property
+    def filename_query_max_length(self) -> int:
+        return self.config.get("output", {}).get("filename_query_max_length", 50)
+    
+    @property
+    def source_extract_preview_length(self) -> int:
+        return self.config.get("output", {}).get("source_extract_preview_length", 150)
+    
+    @property
+    def facts_display_limit(self) -> int:
+        return self.config.get("output", {}).get("facts_display_limit", 5)
+    
+    @property
+    def evidence_display_limit(self) -> int:
+        return self.config.get("output", {}).get("evidence_display_limit", 5)
+    
+    @property
+    def content_limits(self) -> Dict[str, int]:
+        return self.config.get("output", {}).get("content_limits", {
+            "pros_cons_display_limit": 3,
+            "priority_items_limit": 3,
+            "category_items_limit": 10,
+            "options_comparison_limit": 5,
+            "standout_recommendations_limit": 3
+        })
+    
+    @property
     def report_depths(self) -> Dict[str, Any]:
         return self.config.get("output", {}).get("report_depths", {})
 
@@ -226,6 +288,60 @@ class Settings:
     @property
     def log_level(self) -> str:
         return os.getenv("LOG_LEVEL", "INFO")
+    
+    # Validation Settings
+    @property
+    def query_min_length(self) -> int:
+        return self.config.get("validation", {}).get("query_min_length", 5)
+    
+    @property
+    def query_max_length(self) -> int:
+        return self.config.get("validation", {}).get("query_max_length", 500)
+    
+    @property
+    def string_max_length(self) -> int:
+        return self.config.get("validation", {}).get("string_max_length", 1000)
+    
+    @property
+    def personalization_key_max_length(self) -> int:
+        return self.config.get("validation", {}).get("personalization_key_max_length", 50)
+    
+    @property
+    def personalization_value_max_length(self) -> int:
+        return self.config.get("validation", {}).get("personalization_value_max_length", 200)
+    
+    @property
+    def personalization_list_item_max_length(self) -> int:
+        return self.config.get("validation", {}).get("personalization_list_item_max_length", 100)
+    
+    @property
+    def personalization_list_max_size(self) -> int:
+        return self.config.get("validation", {}).get("personalization_list_max_size", 10)
+    
+    @property
+    def personalization_max_keys(self) -> int:
+        return self.config.get("validation", {}).get("personalization_max_keys", 100)
+    
+    @property
+    def personalization_nested_list_max_size(self) -> int:
+        return self.config.get("validation", {}).get("personalization_nested_list_max_size", 50)
+    
+    # UI Settings
+    @property
+    def progress_bar_length(self) -> int:
+        return self.config.get("ui", {}).get("progress_bar_length", 40)
+    
+    @property
+    def banner_width(self) -> int:
+        return self.config.get("ui", {}).get("banner_width", 60)
+    
+    @property
+    def separator_width(self) -> int:
+        return self.config.get("ui", {}).get("separator_width", 80)
+    
+    @property
+    def confidence_decimal_places(self) -> int:
+        return self.config.get("ui", {}).get("confidence_decimal_places", 1)
     
     # Personalization Settings
     @property

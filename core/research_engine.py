@@ -25,7 +25,7 @@ class ResearchEngine:
         """Initialize research engine with Gemini AI."""
         self.settings = settings
         self.session_manager = SessionManager(settings)
-        self.validator = InputValidator()
+        self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
         
         # Configure Gemini AI
@@ -185,7 +185,7 @@ class ResearchEngine:
                     "recommendations": ["Review error logs for details"],
                     "error": str(e)
                 },
-                "confidence_score": 0.1,
+                "confidence_score": self.settings.min_confidence_fallback,
                 "knowledge_base": research_state.get("knowledge_base", {})
             }
     
@@ -292,7 +292,7 @@ class ResearchEngine:
             try:
                 max_retries = int(self.settings.max_retries)
             except Exception:
-                max_retries = 3
+                max_retries = self.settings.fallback_max_retries
         
         for attempt in range(max_retries):
             try:
@@ -310,9 +310,9 @@ class ResearchEngine:
                 try:
                     delay = float(self.settings.retry_delay)
                 except Exception:
-                    delay = 1.0
+                    delay = self.settings.fallback_retry_delay
                 if attempt < max_retries - 1:
-                    time.sleep(delay * (2 ** attempt))
+                    time.sleep(delay * (self.settings.exponential_backoff_base ** attempt))
                 else:
                     raise ValidationError(f"Gemini API failed after {max_retries} attempts: {e}")
     
@@ -391,7 +391,7 @@ Be critical and thorough in your validation process."""
     
     def _build_stage_3_prompt(self, query: str, gaps: List[str]) -> str:
         """Build prompt for Stage 3: Clarification."""
-        gaps_str = "\n".join([f"- {gap}" for gap in gaps[:10]])  # Limit to avoid token limits
+        gaps_str = "\n".join([f"- {gap}" for gap in gaps[:self.settings.max_gaps_per_stage]])  # Limit to avoid token limits
         
         return f"""You are conducting follow-up research to fill knowledge gaps for this query:
 
@@ -677,7 +677,7 @@ Provide clear, actionable, personalized recommendations."""
         final_confidence = (stage_confidence * 0.6) + (evidence_confidence * 0.4)
         
         # Ensure confidence is between 0.1 and 1.0
-        return max(0.1, min(1.0, final_confidence))
+        return max(self.settings.min_confidence_fallback, min(1.0, final_confidence))
     
     def _display_stage_progress(self, stage_num: int, stage_name: str) -> None:
         """Display research stage progress to user."""
@@ -685,7 +685,7 @@ Provide clear, actionable, personalized recommendations."""
         progress = stage_num / total_stages
         
         # Progress bar
-        bar_length = 40
+        bar_length = self.settings.progress_bar_length
         filled_length = int(bar_length * progress)
         bar = "█" * filled_length + "░" * (bar_length - filled_length)
         

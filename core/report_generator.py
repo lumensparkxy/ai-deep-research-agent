@@ -48,6 +48,18 @@ class ReportGenerator:
                 "max_recommendations": 15
             }
         }
+        
+        # Override with settings if available
+        config_depths = self.settings.report_depths
+        for depth_name, config in config_depths.items():
+            if depth_name in self.depth_configs:
+                # Update with values from settings
+                self.depth_configs[depth_name].update({
+                    "max_evidence": config.get("max_evidence", self.depth_configs[depth_name]["max_evidence"]),
+                    "max_recommendations": config.get("max_recommendations", self.depth_configs[depth_name]["max_recommendations"]),
+                    "max_facts_per_stage": config.get("max_facts_per_stage", 5),
+                    "max_insights_per_section": config.get("max_insights_per_section", 10)
+                })
     
     def generate_report(self, session_data: Dict[str, Any], 
                        research_results: Dict[str, Any], depth: str) -> str:
@@ -97,7 +109,7 @@ class ReportGenerator:
         # Create query slug (safe filename)
         query_slug = re.sub(r'[^\w\s-]', '', query)
         query_slug = re.sub(r'[-\s]+', '_', query_slug)
-        query_slug = query_slug[:50]  # Limit length
+        query_slug = query_slug[:self.settings.filename_query_max_length]  # Limit length
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"{session_id}_{query_slug}.md"
@@ -315,7 +327,7 @@ This report was generated using a comprehensive 6-stage iterative research proce
             
             # Add key findings
             if "key_facts" in findings:
-                facts = findings["key_facts"][:5]  # Limit for readability
+                facts = findings["key_facts"][:self.settings.facts_display_limit]  # Limit for readability
                 if facts:
                     content += "\n\n**Key Findings**:"
                     for fact in facts:
@@ -355,7 +367,8 @@ This report was generated using a comprehensive 6-stage iterative research proce
         # Key insights
         if all_insights:
             content += "\n\n### 🧠 Key Insights"
-            for insight in all_insights[:config["max_evidence"]]:
+            max_insights = config.get("max_insights_per_section", self.settings.evidence_display_limit)
+            for insight in all_insights[:max_insights]:
                 content += f"\n- {insight}"
         
         # Evidence quality analysis
@@ -406,7 +419,8 @@ This report was generated using a comprehensive 6-stage iterative research proce
         for category, items in findings_by_category.items():
             if items:
                 content += f"\n\n### {category}"
-                for item in items[:10]:  # Limit items per category
+                max_items = self.settings.content_limits.get("category_items_limit", 10)
+                for item in items[:max_items]:  # Limit items per category
                     content += f"\n- {item}"
         
         return content
@@ -429,7 +443,8 @@ This report was generated using a comprehensive 6-stage iterative research proce
             options = findings.get("options_identified", [])
             if options:
                 content += "\n\n### Options Evaluated"
-                for i, option in enumerate(options[:5], 1):
+                max_options = self.settings.content_limits.get("options_comparison_limit", 5)
+                for i, option in enumerate(options[:max_options], 1):
                     content += f"""
 
 **Option {i}: {option.get("option", "Unknown")}**
@@ -439,16 +454,20 @@ This report was generated using a comprehensive 6-stage iterative research proce
                     pros = option.get("pros", [])
                     cons = option.get("cons", [])
                     
+                    pros_limit = self.settings.content_limits.get("pros_cons_display_limit", 3)
+                    cons_limit = self.settings.content_limits.get("pros_cons_display_limit", 3)
+                    
                     if pros:
-                        content += "\n- **Pros**: " + "; ".join(pros[:3])
+                        content += "\n- **Pros**: " + "; ".join(pros[:pros_limit])
                     if cons:
-                        content += "\n- **Cons**: " + "; ".join(cons[:3])
+                        content += "\n- **Cons**: " + "; ".join(cons[:cons_limit])
             
             # Standout recommendations
             standouts = findings.get("standout_recommendations", [])
             if standouts:
                 content += "\n\n### Standout Options"
-                for rec in standouts[:3]:
+                max_standouts = self.settings.content_limits.get("standout_recommendations_limit", 3)
+                for rec in standouts[:max_standouts]:
                     content += f"\n- {rec}"
         else:
             content += "\n\nComparative analysis was not completed in this research session."
@@ -476,7 +495,10 @@ This report was generated using a comprehensive 6-stage iterative research proce
             ]:
                 if priority_group:
                     content += f"\n\n### {title}"
-                    for rec in priority_group[:config["max_recommendations"]]:
+                    max_recs = min(config["max_recommendations"], 
+                                 self.settings.content_limits.get("priority_items_limit", 3) 
+                                 if priority_group == high_priority else config["max_recommendations"])
+                    for rec in priority_group[:max_recs]:
                         rec_text = rec.get("recommendation", "No recommendation text")
                         reasoning = rec.get("reasoning", "")
                         confidence = rec.get("confidence", 0)
@@ -601,7 +623,8 @@ This report was generated using a comprehensive 6-stage iterative research proce
 - **Relevance**: {relevance:.1%}"""
                 
                 if extract:
-                    content += f"\n- **Extract**: \"{extract[:150]}{'...' if len(extract) > 150 else ''}\""""
+                    extract_length = self.settings.source_extract_preview_length
+                    content += f"\n- **Extract**: \"{extract[:extract_length]}{'...' if len(extract) > extract_length else ''}\""""
         else:
             content += "\n\nNo sources were documented in this research."
         
