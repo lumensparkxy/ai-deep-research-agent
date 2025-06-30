@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from .conversation_state import ConversationState, QuestionType, ConversationMode
 
@@ -65,7 +66,7 @@ class QuestionGenerationResult:
 class AIQuestionGenerator:
     """AI-powered question generation system using Gemini API."""
     
-    def __init__(self, gemini_client: Optional[genai.GenerativeModel] = None):
+    def __init__(self, gemini_client: Optional[genai.Client] = None):
         """
         Initialize the AI question generator.
         
@@ -317,10 +318,19 @@ class AIQuestionGenerator:
         """Query Gemini with retry logic."""
         for attempt in range(self.api_retry_attempts):
             try:
-                if asyncio.iscoroutinefunction(self.gemini_client.generate_content):
-                    response = await self.gemini_client.generate_content(prompt)
+                # Use the new google-genai client API
+                if hasattr(self.gemini_client, 'aio'):
+                    # Async call
+                    response = await self.gemini_client.aio.models.generate_content(
+                        model='gemini-2.0-flash-001',  # Default model
+                        contents=prompt
+                    )
                 else:
-                    response = self.gemini_client.generate_content(prompt)
+                    # Sync call wrapped in async
+                    response = self.gemini_client.models.generate_content(
+                        model='gemini-2.0-flash-001',  # Default model
+                        contents=prompt
+                    )
                 return response
                 
             except Exception as e:

@@ -9,7 +9,8 @@ from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import asdict
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # Import Phase 1 components
 from .conversation_state import ConversationState, QuestionAnswer, QuestionType
@@ -27,7 +28,7 @@ class DynamicPersonalizationEngine:
     """
     
     def __init__(self, 
-                 gemini_client: Optional[genai.GenerativeModel] = None,
+                 gemini_client: Optional[genai.Client] = None,
                  conversation_history: Optional[ConversationHistory] = None):
         """
         Initialize the Dynamic Personalization Engine.
@@ -729,7 +730,10 @@ class DynamicPersonalizationEngine:
             prompt = self._create_intelligent_ai_prompt(conversation_state, asked_questions)
             
             # Query Gemini for the next question
-            response = self.question_generator.gemini_client.generate_content(prompt)
+            response = self.question_generator.gemini_client.models.generate_content(
+                model='gemini-2.0-flash-001',
+                contents=prompt
+            )
             
             if response and response.text:
                 # Extract the question from the response
@@ -827,7 +831,10 @@ Generate ONLY the question text (no explanations or additional text):"""
             prompt = self._create_ai_question_prompt(category, conversation_state, asked_questions)
             
             # Query Gemini for the next question
-            response = self.question_generator.gemini_client.generate_content(prompt)
+            response = self.question_generator.gemini_client.models.generate_content(
+                model='gemini-2.0-flash-001',
+                contents=prompt
+            )
             
             if response and response.text:
                 # Extract the question from the response

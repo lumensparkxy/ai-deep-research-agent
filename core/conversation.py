@@ -31,9 +31,8 @@ class ConversationHandler:
         
         # Initialize Dynamic Personalization Engine
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.gemini_api_key)
-            gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+            from google import genai
+            gemini_client = genai.Client(api_key=settings.gemini_api_key)
             self.personalization_engine = DynamicPersonalizationEngine(gemini_client)
         except Exception as e:
             self.logger.warning(f"Could not initialize personalization engine: {e}")
