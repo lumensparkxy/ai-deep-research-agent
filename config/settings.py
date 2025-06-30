@@ -129,10 +129,10 @@ class Settings:
 
         # If using the default settings.yaml, tests expect the pre-flash model
         if not getattr(self, '_explicit_config', False):
-            return "gemini-1.5-pro-latest"
+            return "gemini-2.5-flash"
 
         # Otherwise read from YAML config
-        return self.config.get("ai", {}).get("model", "gemini-1.5-pro-latest")
+        return self.config.get("ai", {}).get("model", "gemini-2.5-flash")
 
     @property
     def enable_grounding(self) -> bool:
