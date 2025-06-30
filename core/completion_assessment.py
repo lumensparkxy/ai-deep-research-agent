@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # Import the proper conversation state from Task 1.1
 from .conversation_state import ConversationState
@@ -38,15 +39,17 @@ class CompletionResult:
 class CompletionAssessment:
     """AI-driven conversation completion assessment system."""
     
-    def __init__(self, gemini_client: Optional[genai.GenerativeModel] = None):
+    def __init__(self, gemini_client: Optional[genai.Client] = None, model_name: str = "gemini-2.0-flash-001"):
         """
         Initialize the completion assessment system.
         
         Args:
             gemini_client: Configured Gemini client for AI analysis
+            model_name: Name of the Gemini model to use for analysis
         """
         self.logger = logging.getLogger(__name__)
         self.gemini_client = gemini_client
+        self.model_name = model_name
         
         # Assessment thresholds
         self.critical_confidence_threshold = 0.65  # Lowered from 0.8
@@ -135,7 +138,10 @@ class CompletionAssessment:
             prompt = self._create_gap_identification_prompt(user_query, gathered_info)
             
             # Query Gemini
-            response = self.gemini_client.generate_content(prompt)
+            response = self.gemini_client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             
             # Parse response
             gaps = self._parse_gap_response(response.text)

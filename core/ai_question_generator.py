@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from .conversation_state import ConversationState, QuestionType, ConversationMode
 
@@ -65,15 +66,17 @@ class QuestionGenerationResult:
 class AIQuestionGenerator:
     """AI-powered question generation system using Gemini API."""
     
-    def __init__(self, gemini_client: Optional[genai.GenerativeModel] = None):
+    def __init__(self, gemini_client: Optional[genai.Client] = None, model_name: str = "gemini-2.0-flash-001"):
         """
         Initialize the AI question generator.
         
         Args:
             gemini_client: Configured Gemini client for AI analysis
+            model_name: Name of the Gemini model to use for generation
         """
         self.logger = logging.getLogger(__name__)
         self.gemini_client = gemini_client
+        self.model_name = model_name
         
         # Generation settings
         self.max_questions_per_request = 5
@@ -317,10 +320,19 @@ class AIQuestionGenerator:
         """Query Gemini with retry logic."""
         for attempt in range(self.api_retry_attempts):
             try:
-                if asyncio.iscoroutinefunction(self.gemini_client.generate_content):
-                    response = await self.gemini_client.generate_content(prompt)
+                # Use the new google-genai client API
+                if hasattr(self.gemini_client, 'aio'):
+                    # Async call
+                    response = await self.gemini_client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt
+                    )
                 else:
-                    response = self.gemini_client.generate_content(prompt)
+                    # Sync call wrapped in async
+                    response = self.gemini_client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt
+                    )
                 return response
                 
             except Exception as e:
@@ -721,27 +733,50 @@ Example:
         )
     
     def _create_fallback_questions(self, conversation_state: ConversationState) -> QuestionGenerationResult:
-        """Create fallback questions when AI generation fails."""
+        """Create diverse, context-aware fallback questions when AI generation fails."""
+        
+        # Create context-aware fallback questions based on query content
+        query_lower = conversation_state.user_query.lower()
+        question_count = len(conversation_state.question_history)
+        
+        # Determine question type based on conversation progress and context
+        if question_count == 0:
+            # Opening questions
+            if any(word in query_lower for word in ['best', 'top', 'recommend']):
+                question_text = "What specific needs should guide my recommendations?"
+            elif any(word in query_lower for word in ['how', 'way', 'method']):
+                question_text = "What's your experience level with this area?"
+            else:
+                question_text = "What outcome are you hoping to achieve?"
+        elif question_count < 3:
+            # Early conversation
+            fallback_options = [
+                "What constraints or requirements should I consider?",
+                "How will you primarily be using this?",
+                "What's driving this decision right now?",
+                "Are there specific features that matter most to you?"
+            ]
+            question_text = fallback_options[question_count % len(fallback_options)]
+        else:
+            # Later conversation
+            fallback_options = [
+                "What other factors would help refine my recommendations?",
+                "Are there any deal-breakers I should be aware of?",
+                "What questions do you have about the available options?",
+                "How much flexibility do you have in your approach?"
+            ]
+            question_text = fallback_options[question_count % len(fallback_options)]
+        
         fallback_questions = [
             GeneratedQuestion(
-                question="Can you tell me more about what you're looking for?",
+                question=question_text,
                 question_type=QuestionType.OPEN_ENDED,
                 category="context",
                 priority=0.8,
-                context_relevance=0.7,
+                context_relevance=0.8,
                 expected_answer_type="text",
                 follow_up_potential=0.8,
-                reasoning="Fallback general question"
-            ),
-            GeneratedQuestion(
-                question="What's most important to you in this decision?",
-                question_type=QuestionType.OPEN_ENDED,
-                category="preferences",
-                priority=0.7,
-                context_relevance=0.7,
-                expected_answer_type="text",
-                follow_up_potential=0.7,
-                reasoning="Fallback preferences question"
+                reasoning=f"Context-aware fallback for query: {conversation_state.user_query}"
             )
         ]
         

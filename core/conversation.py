@@ -12,6 +12,13 @@ from config.settings import Settings
 from utils.session_manager import SessionManager
 from utils.validators import InputValidator, ValidationError
 from .dynamic_personalization import DynamicPersonalizationEngine
+from .conversation_mode_intelligence import (
+    ConversationModeIntelligence, 
+    AdaptiveModeManager,
+    ConversationMode,
+    UserSignals,
+    EngagementMetrics
+)
 
 
 class ConversationHandler:
@@ -31,13 +38,25 @@ class ConversationHandler:
         
         # Initialize Dynamic Personalization Engine
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.gemini_api_key)
-            gemini_client = genai.GenerativeModel('gemini-1.5-flash')
-            self.personalization_engine = DynamicPersonalizationEngine(gemini_client)
+            from google import genai
+            gemini_client = genai.Client(api_key=settings.gemini_api_key)
+            self.personalization_engine = DynamicPersonalizationEngine(
+                gemini_client=gemini_client,
+                model_name=settings.ai_model
+            )
+            
+            # Initialize Conversation Mode Intelligence
+            self.mode_intelligence = ConversationModeIntelligence(
+                gemini_client=gemini_client,
+                model_name=settings.ai_model
+            )
+            self.adaptive_manager = AdaptiveModeManager(self.mode_intelligence)
+            
         except Exception as e:
-            self.logger.warning(f"Could not initialize personalization engine: {e}")
+            self.logger.warning(f"Could not initialize AI engines: {e}")
             self.personalization_engine = None
+            self.mode_intelligence = None
+            self.adaptive_manager = None
         
         # Conversation state
         self.current_session = None
@@ -214,16 +233,17 @@ class ConversationHandler:
     
     def _gather_personalization(self, query: str, temp_session_id: str = None) -> Dict[str, Any]:
         """
-        Gather personalization information using dynamic AI-driven conversation.
+        Gather personalization information using dynamic AI-driven conversation with intelligent mode selection.
         
         Args:
             query: User's research query
+            temp_session_id: Temporary session ID for conversation tracking
             
         Returns:
             Dictionary of personalization data
         """
-        if not self.personalization_engine:
-            # Fallback to static questions if personalization engine not available
+        if not self.personalization_engine or not self.mode_intelligence:
+            # Fallback to static questions if AI engines not available
             return self._gather_static_personalization(query)
         
         print("\n🤖 Let me ask you some intelligent questions to personalize your research:")
@@ -231,47 +251,108 @@ class ConversationHandler:
         print()
         
         try:
-            # Initialize dynamic conversation
+            # Analyze user signals to determine optimal conversation mode
+            user_signals = self.mode_intelligence.analyze_user_signals(query)
+            mode_recommendation = self.mode_intelligence.recommend_conversation_mode(user_signals)
+            
+            print(f"🎯 Detected conversation style: {mode_recommendation.recommended_mode.value.title()} Mode")
+            print(f"   {mode_recommendation.reasoning}")
+            print()
+            
+            # Initialize dynamic conversation with mode intelligence
             session_id = temp_session_id or f"personalization_{int(datetime.now().timestamp() * 1000)}"
             conversation_state = self.personalization_engine.initialize_conversation(query, session_id)
             self.current_conversation_state = conversation_state
             
-            # Conduct intelligent conversation with dynamic question limit
-            # The personalization engine will determine when to stop based on information quality
-            conversation_state = self.personalization_engine.initialize_conversation(query, session_id)
-            self.current_conversation_state = conversation_state
+            # Set initial conversation mode
+            current_mode = mode_recommendation.recommended_mode
+            self.adaptive_manager.current_mode = current_mode
+            
+            # Get mode-specific configuration
+            mode_config = self.mode_intelligence.mode_configs[current_mode]
+            max_questions = mode_config.max_questions
             
             context = {"personalize": True}
-            
+            user_responses = []
+            response_times = []
             question_count = 0
-            max_absolute_questions = 10  # Safety limit to prevent infinite loops
             
-            while question_count < max_absolute_questions:
-                # Generate next intelligent question
-                question = self.personalization_engine.generate_next_question(conversation_state)
+            print(f"📋 I'll ask up to {max_questions} questions to understand your needs:")
+            
+            while question_count < max_questions:
+                # Generate next intelligent question with mode-specific prompting
+                mode_context = {
+                    'user_query': query,
+                    'context_type': user_signals.context_type,
+                    'current_mode': current_mode.value
+                }
+                
+                # Apply mode-specific prompt
+                mode_prompt = self.mode_intelligence.create_mode_specific_prompt(current_mode, mode_context)
+                
+                question = self.personalization_engine.generate_next_question(
+                    conversation_state, 
+                    additional_context=mode_prompt
+                )
                 
                 if not question:
                     print("✅ I have enough information to provide personalized recommendations!")
                     break
                 
-                # Ask the question
-                print(f"\n💭 Question {question_count + 1}:")
+                # Ask the question with mode-appropriate formatting
+                question_prefix = self._get_mode_question_prefix(current_mode, question_count + 1, max_questions)
+                print(f"\n{question_prefix}")
+                
                 try:
+                    start_time = datetime.now()
                     response = input(f"{question}\n➤ ").strip()
+                    response_time = (datetime.now() - start_time).total_seconds()
                     
                     if not response:
                         print("   (Skipped)")
                         question_count += 1
                         continue
                     
+                    # Track user response patterns
+                    user_responses.append(response)
+                    response_times.append(response_time)
+                    
                     # Process the response
                     result = self.personalization_engine.process_user_response(
                         conversation_state, question, response
                     )
                     
-                    # Show brief acknowledgment
+                    # Monitor engagement and check for mode switching
+                    if question_count >= 2:  # Need some history for engagement analysis
+                        engagement_metrics = self.adaptive_manager.monitor_engagement(
+                            user_responses, response_times
+                        )
+                        
+                        should_switch = self.mode_intelligence.should_switch_mode(
+                            current_mode, engagement_metrics, question_count + 1
+                        )
+                        
+                        if should_switch:
+                            # Determine new mode based on engagement
+                            new_mode = self._determine_new_mode(current_mode, engagement_metrics, user_signals)
+                            
+                            if new_mode != current_mode:
+                                transition = self.adaptive_manager.transition_between_modes(
+                                    current_mode, new_mode, "Engagement-based adaptation"
+                                )
+                                
+                                if transition.user_notification:
+                                    print(f"\n🔄 {transition.transition_message}")
+                                
+                                current_mode = new_mode
+                                max_questions = transition.new_questioning_depth
+                                
+                                print(f"   Switching to {current_mode.value.title()} Mode ({max_questions} questions max)")
+                    
+                    # Show brief acknowledgment based on mode
                     if result.get('extracted_info'):
-                        print("   ✓ Got it! This helps me understand your needs better.")
+                        acknowledgment = self._get_mode_acknowledgment(current_mode, question_count + 1)
+                        print(f"   {acknowledgment}")
                     
                     question_count += 1
                     
@@ -282,15 +363,21 @@ class ConversationHandler:
             # Get conversation summary
             summary = self.personalization_engine.get_conversation_summary(conversation_state)
             
+            # Add mode intelligence insights to summary
+            summary['conversation_mode_used'] = current_mode.value
+            summary['mode_transitions'] = len(self.adaptive_manager.mode_history)
+            summary['final_engagement'] = self.adaptive_manager.monitor_engagement(user_responses, response_times)
+            
             # Convert to expected format
             extracted_context = self._convert_conversation_to_context(conversation_state, summary)
             
-            print(f"\n🎯 Personalization complete! Gathered insights on {len(conversation_state.user_profile)} key areas.")
+            # Show completion message with mode intelligence summary
+            self._show_personalization_completion(current_mode, question_count, extracted_context)
             
             return extracted_context
             
         except Exception as e:
-            self.logger.error(f"Error in dynamic personalization: {e}")
+            self.logger.error(f"Error in dynamic personalization with mode intelligence: {e}")
             print("🔄 Falling back to standard questions...")
             return self._gather_static_personalization(query)
     
@@ -456,74 +543,3 @@ class ConversationHandler:
                     
             except (KeyboardInterrupt, EOFError):
                 raise
-    
-    def _show_completion_message(self, session_id: str, report_path: str, 
-                                research_results: Dict[str, Any]) -> None:
-        """Show completion message with results."""
-        confidence = research_results.get('confidence_score', 0.0)
-        
-        print("\n" + "=" * 60)
-        print("✅ Research Complete!")
-        print("=" * 60)
-        print(f"Session ID: {session_id}")
-        print(f"Confidence Score: {confidence:.1%}")
-        print(f"Report Location: {report_path}")
-        print()
-        print("🎉 Your personalized research report is ready!")
-        print("You can find detailed findings and recommendations in the report file.")
-        print()
-        print("Thank you for using Deep Research Agent!")
-        print("=" * 60)
-    
-    def display_progress(self, stage: int, stage_name: str, message: str) -> None:
-        """
-        Display research progress to user.
-        
-        Args:
-            stage: Current stage number
-            stage_name: Name of current stage
-            message: Progress message
-        """
-        total_stages = len(self.settings.research_stages)
-        
-        print(f"\n🔬 STAGE {stage}/{total_stages}: {stage_name}")
-        print(f"   {message}")
-        
-        # Show progress bar
-        progress = stage / total_stages
-        bar_length = 40
-        filled_length = int(bar_length * progress)
-        bar = "█" * filled_length + "░" * (bar_length - filled_length)
-        
-        print(f"   [{bar}] {progress:.0%}")
-    
-    def display_error(self, error_message: str, is_recoverable: bool = True) -> None:
-        """
-        Display error message to user.
-        
-        Args:
-            error_message: Error description
-            is_recoverable: Whether the error is recoverable
-        """
-        print(f"\n❌ {error_message}")
-        
-        if is_recoverable:
-            print("   Attempting to continue with available information...")
-        else:
-            print("   This error cannot be recovered from automatically.")
-    
-    def confirm_action(self, message: str) -> bool:
-        """
-        Ask user to confirm an action.
-        
-        Args:
-            message: Confirmation message
-            
-        Returns:
-            True if confirmed
-        """
-        try:
-            response = input(f"{message} (y/n): ").strip().lower()
-            return response in ['y', 'yes', '']
-        except (KeyboardInterrupt, EOFError):
-            return False

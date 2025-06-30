@@ -10,8 +10,8 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google import genai
+from google.genai import types
 
 from config.settings import Settings
 from utils.session_manager import SessionManager
@@ -44,20 +44,13 @@ class ResearchEngine:
     def _setup_gemini(self) -> None:
         """Configure Gemini AI client."""
         try:
-            genai.configure(api_key=self.settings.gemini_api_key)
+            # Create Gemini client with API key
+            self.client = genai.Client(api_key=self.settings.gemini_api_key)
             
-            # Configure model with safety settings
-            self.model = genai.GenerativeModel(
-                model_name=self.settings.ai_model,
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                }
-            )
+            # Store model name for use in requests
+            self.model_name = self.settings.ai_model
             
-            self.logger.info(f"Initialized Gemini model: {self.settings.ai_model}")
+            self.logger.info(f"Initialized Gemini client with model: {self.model_name}")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize Gemini: {e}")
@@ -296,7 +289,34 @@ class ResearchEngine:
         
         for attempt in range(max_retries):
             try:
-                response = self.model.generate_content(prompt)
+                # Use new google-genai client API with safety settings
+                config = types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(
+                            category='HARM_CATEGORY_HATE_SPEECH',
+                            threshold='BLOCK_MEDIUM_AND_ABOVE',
+                        ),
+                        types.SafetySetting(
+                            category='HARM_CATEGORY_DANGEROUS_CONTENT',
+                            threshold='BLOCK_MEDIUM_AND_ABOVE',
+                        ),
+                        types.SafetySetting(
+                            category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                            threshold='BLOCK_MEDIUM_AND_ABOVE',
+                        ),
+                        types.SafetySetting(
+                            category='HARM_CATEGORY_HARASSMENT',
+                            threshold='BLOCK_MEDIUM_AND_ABOVE',
+                        )
+                    ]
+                )
+                
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=config
+                )
+                
                 if response.text:
                     return response.text
                 # Empty response is a terminal validation error

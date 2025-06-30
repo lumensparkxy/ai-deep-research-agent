@@ -11,6 +11,8 @@ The Deep Research Agent is a complete, production-ready AI-powered decision supp
 - **Universal Decision Support** - Handle any decision type (health, finance, technology, lifestyle, business, etc.)
 - **Real AI-Powered Research** - Complete integration with Google Gemini 2.5 Pro for actual research
 - **6-Stage Research Process** - Comprehensive iterative methodology from information gathering to final conclusions
+- **Dynamic Personalization** - AI-powered intelligent question generation with adaptive conversation modes
+- **Context-Aware Analysis** - Advanced pattern recognition and priority detection for personalized insights
 - **Evidence-Based Analysis** - Source reliability scoring and fact-checking across all stages
 - **Personalized Recommendations** - Context-aware analysis tailored to user's specific situation
 - **Professional Reports** - Three depth levels (Quick/Standard/Detailed) with implementation guidance
@@ -86,6 +88,56 @@ The Deep Research Agent is a complete, production-ready AI-powered decision supp
    # Edit .env and add your GEMINI_API_KEY
    ```
 
+## 🤖 Dynamic Personalization System
+
+The Deep Research Agent features a sophisticated dynamic personalization system that intelligently adapts to user needs through AI-powered conversation modes and context analysis.
+
+### Conversation Modes
+
+The system offers four adaptive conversation modes:
+
+- **Quick Mode** (3 questions max)
+  - Time-sensitive decisions requiring rapid analysis
+  - Focuses on 1-2 most critical decision factors
+  - Optimized for immediate insights
+
+- **Standard Mode** (6 questions max) 
+  - Balanced approach for most decisions
+  - Covers key decision aspects efficiently
+  - Default mode with good depth-to-time ratio
+
+- **Deep Mode** (12 questions max)
+  - Comprehensive analysis for complex decisions
+  - Explores all relevant decision factors
+  - Ideal for high-stakes or long-term decisions
+
+- **Adaptive Mode** (8 questions max)
+  - Dynamically adjusts based on user responses
+  - Adapts questioning depth to user engagement
+  - Flexible approach that evolves during conversation
+
+### AI-Powered Question Generation
+
+- **Intelligent Question Creation** - AI generates contextually relevant questions based on decision category and user responses
+- **Duplicate Detection** - Prevents redundant questions for better user experience
+- **Relevance Scoring** - Ensures questions meet quality thresholds before presentation
+- **Category-Specific Fallbacks** - Predefined quality questions for each decision domain
+
+### Advanced Context Analysis
+
+- **Priority Detection** - Identifies what matters most (budget, timeline, quality, convenience)
+- **Communication Style Recognition** - Adapts to user's preferred interaction style
+- **Expertise Level Assessment** - Adjusts complexity based on user knowledge
+- **Decision Pattern Analysis** - Recognizes decision-making preferences and style
+- **Gap Identification** - Identifies critical missing information for research focus
+
+### User Preference Learning
+
+- **Session Learning** - Adapts within conversation based on responses
+- **Preference Storage** - Saves user preferences for future sessions (optional)
+- **Pattern Recognition** - Identifies recurring preferences and decision factors
+- **Privacy-First Design** - Cross-session patterns disabled by default for privacy
+
 ## 🎯 Usage
 
 ### Interactive Research Session
@@ -98,8 +150,8 @@ python main.py
 
 The system will guide you through:
 1. **Query Collection** - What decision do you need help with?
-2. **Personalization** - Optional context gathering for tailored recommendations
-3. **Research Process** - Live progress through 6-stage research
+2. **Smart Personalization** - AI-powered adaptive questioning with intelligent conversation modes
+3. **Research Process** - Live progress through 6-stage research with personalized focus
 4. **Report Generation** - Choose report depth and receive comprehensive analysis
 
 ### Command Line Options
@@ -372,14 +424,6 @@ The system has been tested with various queries and consistently delivers:
 - **Comprehensive evidence** from reliable sources
 - **Actionable recommendations** with implementation guidance
 - **Professional reports** suitable for decision-making
-
-### Sample Output
-```
-🔬 Starting Research Session: DRA_20250628_203700
-📊 STAGE 1/6: Information Gathering
-   [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 17%
-   🔍 Gathering initial information and evidence...
-```
 
 ### Test-Driven Development Workflow
 

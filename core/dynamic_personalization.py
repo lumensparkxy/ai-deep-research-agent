@@ -5,11 +5,18 @@ context analysis, and conversation memory to create intelligent, adaptive conver
 """
 
 import logging
+import time
+import re
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import asdict
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
+try:
+    from google.genai import types
+except ImportError:
+    # Fallback for older versions
+    types = None
 
 # Import Phase 1 components
 from .conversation_state import ConversationState, QuestionAnswer, QuestionType
@@ -27,19 +34,22 @@ class DynamicPersonalizationEngine:
     """
     
     def __init__(self, 
-                 gemini_client: Optional[genai.GenerativeModel] = None,
-                 conversation_history: Optional[ConversationHistory] = None):
+                 gemini_client: Optional[genai.Client] = None,
+                 conversation_history: Optional[ConversationHistory] = None,
+                 model_name: str = "gemini-2.0-flash-001"):
         """
         Initialize the Dynamic Personalization Engine.
         
         Args:
             gemini_client: Configured Gemini client for AI operations
             conversation_history: Optional existing conversation history
+            model_name: Name of the Gemini model to use for generation
         """
         self.logger = logging.getLogger(__name__)
+        self.model_name = model_name
         
         # Initialize Phase 1 components
-        self.question_generator = AIQuestionGenerator(gemini_client)
+        self.question_generator = AIQuestionGenerator(gemini_client, model_name)
         self.context_analyzer = ContextAnalyzer()  # ContextAnalyzer doesn't take gemini_client
         self.conversation_history = conversation_history or ConversationHistory()
         
@@ -711,137 +721,418 @@ class DynamicPersonalizationEngine:
     def _generate_intelligent_ai_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
         """Generate an intelligent question using pure AI without rigid categories."""
         try:
-            # Try to use Gemini AI for intelligent question generation
-            if self.question_generator.gemini_client:
-                return self._generate_pure_ai_question(conversation_state, asked_questions)
-            else:
-                # Simple fallback if Gemini not available
+            # Check if Gemini client is available and functional
+            if not self.question_generator.gemini_client:
+                self.logger.info("Gemini client not available, using fallback questions")
                 return self._generate_simple_fallback_question(conversation_state, asked_questions)
+            
+            # Try to use Gemini AI for intelligent question generation
+            self.logger.debug("Attempting AI question generation...")
+            return self._generate_pure_ai_question(conversation_state, asked_questions)
                 
         except Exception as e:
-            self.logger.warning(f"AI question generation failed, using fallback: {e}")
+            self.logger.warning(f"AI question generation failed with error: {str(e)[:200]}..., using fallback")
             return self._generate_simple_fallback_question(conversation_state, asked_questions)
     
     def _generate_pure_ai_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
         """Use Gemini AI to generate the next intelligent question without category constraints."""
         try:
-            # Create a comprehensive prompt for Gemini
-            prompt = self._create_intelligent_ai_prompt(conversation_state, asked_questions)
+            # Use optimized prompt to prevent context overload and improve consistency
+            questions_count = len(conversation_state.question_history)
             
-            # Query Gemini for the next question
-            response = self.question_generator.gemini_client.generate_content(prompt)
+            # Switch to concise prompts after 2 questions to prevent AI confusion
+            if questions_count >= 2:
+                prompt = self._create_concise_intelligent_ai_prompt(conversation_state, asked_questions)
+                self.logger.debug(f"Using concise prompt for question {questions_count + 1} (length: {len(prompt)} chars)")
+            else:
+                prompt = self._create_intelligent_ai_prompt(conversation_state, asked_questions)
+                self.logger.debug(f"Using full prompt for question {questions_count + 1} (length: {len(prompt)} chars)")
             
-            if response and response.text:
-                # Extract the question from the response
-                generated_question = self._extract_question_from_response(response.text)
-                
-                if generated_question and not self._is_similar_question(generated_question, asked_questions):
-                    self.logger.debug(f"AI generated intelligent question: {generated_question[:50]}...")
-                    return generated_question
-                else:
-                    self.logger.warning("AI generated similar or invalid question, using fallback")
-                    return self._generate_simple_fallback_question(conversation_state, asked_questions)
+            # Improved timeout handling and retry logic
+            max_retries = 3  # Increased from 2
+            timeout_seconds = 20  # Increased from 15
+            
+            for attempt in range(max_retries):
+                try:
+                    start_time = time.time()
+                    
+                    # Query Gemini for the next question - use simple call without config for now
+                    response = self.question_generator.gemini_client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt
+                    )
+                    
+                    response_time = time.time() - start_time
+                    
+                    if response_time > 15:
+                        self.logger.warning(f"Slow AI response: {response_time:.2f}s")
+                    
+                    if response and response.text:
+                        # Extract the question from the response
+                        generated_question = self._extract_question_from_response(response.text)
+                        
+                        if generated_question:
+                            # Use context-aware similarity check for better progression
+                            if not self._is_similar_question_context_aware(generated_question, asked_questions, conversation_state):
+                                self.logger.debug(f"AI generated intelligent question in {response_time:.2f}s: {generated_question[:50]}...")
+                                return generated_question
+                            else:
+                                self.logger.debug(f"AI generated similar question (attempt {attempt + 1}): {generated_question[:50]}...")
+                                # If similar, try again instead of immediately falling back
+                                if attempt < max_retries - 1:
+                                    continue
+                                else:
+                                    self.logger.info("AI generated similar questions after all attempts, using fallback")
+                                    return self._generate_simple_fallback_question(conversation_state, asked_questions)
+                        else:
+                            self.logger.warning(f"Could not extract valid question from AI response (attempt {attempt + 1}): '{response.text[:100]}...'")
+                    else:
+                        # More detailed debugging of response content
+                        if response:
+                            text_value = getattr(response, 'text', 'No text attribute')
+                            candidates = getattr(response, 'candidates', 'No candidates')
+                            self.logger.warning(f"Empty AI response (attempt {attempt + 1}) - text: {text_value}, candidates: {len(candidates) if hasattr(candidates, '__len__') else candidates}")
+                            
+                            # Check if candidates exist and have content
+                            if hasattr(response, 'candidates') and response.candidates:
+                                for i, candidate in enumerate(response.candidates):
+                                    if hasattr(candidate, 'content') and candidate.content:
+                                        if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                                            for j, part in enumerate(candidate.content.parts):
+                                                if hasattr(part, 'text'):
+                                                    self.logger.debug(f"Found text in candidate {i}, part {j}: '{part.text[:100]}...'")
+                                                    # Try to use this text directly
+                                                    if part.text and part.text.strip():
+                                                        generated_question = self._extract_question_from_response(part.text)
+                                                        if generated_question and not self._is_similar_question_context_aware(generated_question, asked_questions, conversation_state):
+                                                            self.logger.info(f"Recovered question from candidate parts: {generated_question[:50]}...")
+                                                            return generated_question
+                        else:
+                            self.logger.warning(f"No response object received (attempt {attempt + 1})")
+                    
+                except Exception as e:
+                    response_time = time.time() - start_time
+                    self.logger.warning(f"AI attempt {attempt + 1} failed after {response_time:.2f}s: {str(e)[:100]}...")
+                    
+                    # If this was the last attempt, fall back
+                    if attempt == max_retries - 1:
+                        self.logger.error(f"All AI attempts failed, using fallback")
+                        return self._generate_simple_fallback_question(conversation_state, asked_questions)
+                    
+                    # Progressive backoff with jitter
+                    wait_time = min(2 ** attempt, 5)  # Max 5 seconds wait
+                    self.logger.debug(f"Waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
             
         except Exception as e:
-            self.logger.error(f"Error in AI question generation: {e}")
+            self.logger.error(f"Error in AI question generation: {str(e)[:100]}...")
             
         return None
     
     def _create_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str]) -> str:
-        """Create a comprehensive prompt for Gemini to generate intelligent questions."""
-        user_profile_str = "None" if not conversation_state.user_profile else "\n".join([f"- {k}: {v}" for k, v in conversation_state.user_profile.items()])
-        asked_questions_str = "None" if not asked_questions else "\n".join([f"- {q}" for q in asked_questions])
+        """Create an engaging, conversational prompt for Gemini to generate natural questions."""
+        # Build rich conversational context
+        recent_qa = conversation_state.question_history[-2:] if len(conversation_state.question_history) >= 2 else conversation_state.question_history
         
-        # Get recent responses to understand conversation flow
-        recent_responses = [qa.answer for qa in conversation_state.question_history[-3:]] if len(conversation_state.question_history) >= 3 else [qa.answer for qa in conversation_state.question_history]
-        recent_responses_str = "None" if not recent_responses else "\n".join([f"- {resp}" for resp in recent_responses])
+        # Create natural conversation flow context
+        conversation_context = []
+        if recent_qa:
+            for qa in recent_qa:
+                conversation_context.append(f"You asked: '{qa.question}' and they shared: '{qa.answer}'")
         
-        prompt = f"""You are an expert research consultant helping someone make an informed decision. Your goal is to gather the most valuable information to provide personalized recommendations.
+        # Build user insight summary
+        user_insights = []
+        if conversation_state.user_profile:
+            for key, value in list(conversation_state.user_profile.items())[:4]:  # Show more context
+                user_insights.append(f"{key}: {value}")
+        
+        # Create warm, engaging prompt that encourages natural conversation
+        prompt = f"""You are having a friendly, helpful conversation with someone seeking personalized advice about: "{conversation_state.user_query}"
 
-USER'S RESEARCH QUERY: "{conversation_state.user_query}"
+CONVERSATION SO FAR:
+{chr(10).join(conversation_context) if conversation_context else "This is the beginning of your conversation."}
 
-CONVERSATION PROGRESS:
-- Questions Asked So Far: {len(asked_questions)}
-- Information Gathered: {len(conversation_state.user_profile)} data points
+WHAT YOU'VE LEARNED ABOUT THEM:
+{chr(10).join(user_insights) if user_insights else "You're just getting to know them."}
 
-PREVIOUS QUESTIONS (AVOID SIMILAR):
-{asked_questions_str}
+QUESTIONS ALREADY ASKED:
+{chr(10).join([f"• {q}" for q in asked_questions[-5:]]) if asked_questions else "• None yet"}
 
-RECENT USER RESPONSES:
-{recent_responses_str}
+YOUR TASK: Ask ONE thoughtful follow-up question that feels natural and helps you understand what matters most to them for making a great recommendation.
 
-CURRENT PROFILE:
-{user_profile_str}
+CONVERSATION STYLE:
+• Be warm, curious, and genuinely interested
+• Use natural language like you're talking to a friend
+• Build on what they've already shared
+• Ask about their real-world needs and preferences
+• Make them feel heard and understood
+• Show you care about getting them the right advice
 
-YOUR TASK:
-Generate ONE intelligent follow-up question that will help you provide the best possible recommendation for "{conversation_state.user_query}".
+QUESTION GUIDELINES:
+• 10-30 words (natural conversation length)
+• Avoid repeating similar questions or topics already covered
+• Focus on their specific situation and needs
+• Use "you" and "your" to make it personal
+• Ask about ONE specific aspect at a time
+• Make it conversational, not formal or robotic
 
-THINK LIKE AN EXPERT CONSULTANT:
-- What critical information are you still missing?
-- What would help you narrow down the best options?
-- What might reveal important preferences or constraints?
-- What would an expert in this field naturally ask next?
+EXAMPLES OF GREAT QUESTIONS:
+• "What's been your biggest frustration with what you're currently using?"
+• "How do you picture yourself using this on a typical day?"
+• "What would make you feel really confident about your choice?"
+• "Is there anything that would be an absolute deal-breaker for you?"
 
-GUIDELINES:
-1. Be conversational and natural
-2. Build on what you already know from their responses
-3. Ask about ONE specific aspect that matters most for recommendations
-4. Keep it concise (under 25 words)
-5. Focus on actionable information
-6. Avoid repeating similar questions
-
-IMPORTANT:
-- Do NOT ask questions similar to those already asked
-- Do NOT ask for information you already have
-- Focus on what will most help you make better recommendations
-- Make it specific to their query: "{conversation_state.user_query}"
-
-Generate ONLY the question text (no explanations or additional text):"""
+Generate ONE natural, engaging question that builds on the conversation:"""
 
         return prompt
     
-    def _generate_simple_fallback_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
-        """Generate a simple fallback question when AI fails."""
-        fallback_questions = [
-            "What's most important to you in making this decision?",
-            "Are there any specific requirements or constraints I should know about?",
-            "What would make this choice perfect for your needs?",
-            "How do you plan to use this?",
-            "What's your timeline for making this decision?",
-            "What's your budget range for this?",
-            "Are there any deal-breakers I should be aware of?"
-        ]
+    def _create_concise_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str]) -> str:
+        """Create a concise, focused prompt optimized for consistent AI performance."""
+        # Limit context to prevent AI confusion and improve consistency
+        questions_count = len(conversation_state.question_history)
         
-        # Find a question that hasn't been asked (or similar)
+        # Build focused context based on conversation stage
+        if questions_count <= 2:
+            # Early stage: Focus on original query and basic context
+            context_info = self._get_early_stage_context(conversation_state)
+        else:
+            # Later stage: Focus on key insights and gaps
+            context_info = self._get_focused_context(conversation_state, asked_questions)
+        
+        # Create streamlined prompt
+        prompt = f"""You are helping someone choose: "{conversation_state.user_query}"
+
+CURRENT CONTEXT:
+{context_info['context_summary']}
+
+AVOID REPEATING: {context_info['topics_covered']}
+
+FOCUS ON: {context_info['next_focus']}
+
+Generate ONE specific question (10-25 words) that helps them make a confident decision:"""
+
+        return prompt
+    
+    def _get_early_stage_context(self, conversation_state: ConversationState) -> Dict[str, str]:
+        """Get context for early conversation stage (questions 1-2)."""
+        # Simple context for early questions
+        recent_response = ""
+        if conversation_state.question_history:
+            last_qa = conversation_state.question_history[-1]
+            recent_response = f"They shared: {last_qa.answer[:80]}..."
+        
+        # Key insights so far
+        key_insights = []
+        for key, value in list(conversation_state.user_profile.items())[:2]:
+            key_insights.append(f"{key.replace('_', ' ')}: {str(value)[:40]}...")
+        
+        return {
+            'context_summary': recent_response or "Starting conversation",
+            'topics_covered': ", ".join([qa.category for qa in conversation_state.question_history[-3:]]),
+            'next_focus': "their specific needs and preferences"
+        }
+    
+    def _get_focused_context(self, conversation_state: ConversationState, asked_questions: List[str]) -> Dict[str, str]:
+        """Get focused context for later conversation stage (questions 3+)."""
+        # Most important recent insights (max 2)
+        key_insights = []
+        priority_keys = ['budget', 'preferences', 'timeline', 'constraints', 'current_device']
+        
+        for key in priority_keys:
+            if key in conversation_state.user_profile:
+                value = str(conversation_state.user_profile[key])
+                key_insights.append(f"{key}: {value[:50]}...")
+                if len(key_insights) >= 2:
+                    break
+        
+        # Recent meaningful exchange
+        recent_context = ""
+        if conversation_state.question_history:
+            last_qa = conversation_state.question_history[-1]
+            recent_context = f"Recent: Asked about {last_qa.category}, they said: {last_qa.answer[:60]}..."
+        
+        # Topics covered (categories only)
+        covered_topics = list(set([qa.category for qa in conversation_state.question_history]))
+        
+        # Identify what's missing
+        essential_areas = ['budget', 'preferences', 'timeline', 'constraints', 'context']
+        missing_areas = [area for area in essential_areas if area not in covered_topics]
+        next_focus = missing_areas[0] if missing_areas else "decision confidence factors"
+        
+        context_summary = recent_context
+        if key_insights:
+            context_summary += f" | Key info: {'; '.join(key_insights[:2])}"
+        
+        return {
+            'context_summary': context_summary[:200] + "..." if len(context_summary) > 200 else context_summary,
+            'topics_covered': ", ".join(covered_topics[-4:]),  # Last 4 topics only
+            'next_focus': next_focus.replace('_', ' ')
+        }
+    
+    def _generate_simple_fallback_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
+        """Generate engaging, conversational fallback questions when AI fails."""
+        
+        # Get conversation context for personalization
+        query_lower = conversation_state.user_query.lower()
+        user_has_shared = len(conversation_state.question_history) > 0
+        recent_response = conversation_state.question_history[-1].answer if conversation_state.question_history else ""
+        
+        # Technology/Product questions - warm and engaging
+        if any(word in query_lower for word in ['phone', 'laptop', 'computer', 'camera', 'device', 'gadget', 'smartphone']):
+            if user_has_shared:
+                tech_questions = [
+                    f"That's really helpful! Now, what's the main thing you'll be doing with your {self._extract_product_type(query_lower)}?",
+                    "I'm curious - do you have any specific features that are absolutely must-haves for you?",
+                    "What's been your experience with similar products? Any particular likes or dislikes?",
+                    "Tell me about your typical day - how would this fit into your routine?",
+                    "Are there any brands you've had great experiences with, or any you'd prefer to avoid?",
+                    "What's prompting this decision right now? Is there something specific that's not working for you currently?",
+                    "I want to make sure we find the perfect fit - are there any deal-breakers or limitations I should know about?"
+                ]
+            else:
+                tech_questions = [
+                    f"I'd love to help you find the perfect {self._extract_product_type(query_lower)}! What's the main way you're planning to use it?",
+                    "What's most important to you in this decision - is it performance, value, specific features, or something else?",
+                    "Tell me about your experience level with this type of product. Are you pretty tech-savvy or do you prefer something straightforward?",
+                    "What's driving this purchase right now? Is it an upgrade, a new need, or replacing something that's not working?",
+                    "I'm curious about your preferences - do you have any specific requirements or features you absolutely need?",
+                    "What would make this purchase feel like a real win for you?",
+                    "Are there any constraints we should work within, like budget range or timing?"
+                ]
+            fallback_questions = tech_questions
+        
+        # Service/Experience questions - supportive and goal-oriented
+        elif any(word in query_lower for word in ['service', 'course', 'learning', 'travel', 'experience', 'education']):
+            if user_has_shared:
+                service_questions = [
+                    "That makes a lot of sense! What would success look like to you in this area?",
+                    "I'm really interested in understanding your goals better - what's the main outcome you're hoping for?",
+                    "Tell me about your current experience level. Are you starting fresh or building on existing knowledge?",
+                    "What's your realistic timeline looking like? Are you hoping to see results quickly or can you take a more gradual approach?",
+                    "How much time and energy can you realistically dedicate to this right now?",
+                    "What's motivating this decision for you at this moment in your life?",
+                    "Are there any specific challenges or obstacles you're hoping this will help you overcome?"
+                ]
+            else:
+                service_questions = [
+                    "I'm excited to help you with this! What's the main goal you're hoping to achieve?",
+                    "Tell me what success would look like for you in this area.",
+                    "What's your current experience level? Are you starting from scratch or building on what you already know?",
+                    "How much time can you realistically invest in this right now?",
+                    "What's driving this decision for you? Is there something specific you want to change or improve?",
+                    "I want to understand your situation better - what would make this feel really worthwhile for you?",
+                    "Are there any particular approaches or styles that tend to work well for you when learning or trying new things?"
+                ]
+            fallback_questions = service_questions
+            
+        # Investment/Financial questions - thoughtful and empowering
+        elif any(word in query_lower for word in ['invest', 'financial', 'money', 'cost', 'price', 'budget', 'finance']):
+            if user_has_shared:
+                financial_questions = [
+                    "Thanks for sharing that! How does this decision fit into your bigger financial picture?",
+                    "I want to make sure we find something that feels comfortable for you - what's your risk tolerance like?",
+                    "What timeline are you thinking about for seeing results or benefits from this?",
+                    "Tell me about your experience with similar financial decisions - what's worked well for you before?",
+                    "What would need to happen for you to feel really confident about moving forward?",
+                    "Are there any financial constraints or guidelines you like to follow when making decisions like this?",
+                    "What factors typically help you feel good about a financial choice?"
+                ]
+            else:
+                financial_questions = [
+                    "I'd love to help you make a smart financial decision here! How comfortable are you with different levels of risk?",
+                    "Tell me how this fits into your overall financial goals and situation.",
+                    "What's your timeline looking like? Are you thinking short-term or long-term benefits?",
+                    "What would make this investment feel really worthwhile and smart for you?",
+                    "How familiar are you with the options available in this area?",
+                    "I'm curious about your decision-making style - what factors usually help you feel confident about financial choices?",
+                    "Are there any financial principles or constraints that guide your decisions?"
+                ]
+            fallback_questions = financial_questions
+            
+        # General questions - warm and exploratory
+        else:
+            if user_has_shared:
+                general_questions = [
+                    "That's really insightful! What other aspects of this decision are important to you?",
+                    "I'm getting a better picture now - what would make this choice feel absolutely right for you?",
+                    "Based on what you've shared, what information would be most valuable as you make this decision?",
+                    "Tell me more about your specific situation - are there any unique factors I should consider?",
+                    "What's your gut feeling telling you about the direction you want to go?",
+                    "If we could address any concerns or questions you have, what would be most helpful?",
+                    "I want to make sure I understand what matters most to you - what would success look like?"
+                ]
+            else:
+                general_questions = [
+                    "I'm really interested in understanding your specific situation better - what's most important to you in this decision?",
+                    "Tell me what would make this choice feel like a real win for you.",
+                    "What's the main challenge or need you're hoping to address?",
+                    "I'd love to get a sense of your priorities - what factors matter most as you think through this?",
+                    "What's driving this decision for you right now? Is there something specific that's prompted this?",
+                    "How much flexibility do you have in your approach to this?",
+                    "What would need to happen for you to feel completely confident about moving forward?"
+                ]
+            fallback_questions = general_questions
+        
+        # Find an engaging question that hasn't been asked
         for question in fallback_questions:
             if not self._is_similar_question(question, asked_questions):
                 return question
         
-        # If all are similar, return a generic one
-        return "Can you tell me more about what you're looking for?"
+        # Thoughtful backup options that build on conversation
+        if user_has_shared:
+            thoughtful_backups = [
+                "You've given me some great insights! What other details would help me understand your needs even better?",
+                "I really appreciate what you've shared so far. Is there anything else about your situation that would be helpful for me to know?",
+                "Based on our conversation, what questions are coming up for you about the available options?",
+                "What aspects of this decision would you like to explore a bit more deeply?"
+            ]
+        else:
+            thoughtful_backups = [
+                "I'd love to learn more about what matters most to you in this decision - what should I know about your situation?",
+                "Tell me more about what you're hoping to achieve and what would make this choice feel right for you.",
+                "What's the most important thing for me to understand about your needs and preferences?",
+                "I want to make sure I give you the best possible advice - what would be most helpful for you to share?"
+            ]
+        
+        for question in thoughtful_backups:
+            if not self._is_similar_question(question, asked_questions):
+                return question
+                
+        # Final warm fallback
+        return f"I really want to help you find the perfect solution for your {conversation_state.user_query} - what else would be helpful for me to know about what you're looking for?"
     
     def _generate_ai_question(self, category: str, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
-        """Use Gemini AI to generate the next intelligent question."""
+        """Use Gemini AI to generate the next intelligent question with timeout handling."""
         try:
             # Create a comprehensive prompt for Gemini
             prompt = self._create_ai_question_prompt(category, conversation_state, asked_questions)
             
+            start_time = time.time()
+            
             # Query Gemini for the next question
-            response = self.question_generator.gemini_client.generate_content(prompt)
+            response = self.question_generator.gemini_client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            
+            response_time = time.time() - start_time
+            
+            if response_time > 8:
+                self.logger.warning(f"Slow AI response for category '{category}': {response_time:.2f}s")
             
             if response and response.text:
                 # Extract the question from the response
                 generated_question = self._extract_question_from_response(response.text)
                 
                 if generated_question and not self._is_similar_question(generated_question, asked_questions):
-                    self.logger.debug(f"AI generated question for category '{category}': {generated_question[:50]}...")
+                    self.logger.debug(f"AI generated question for category '{category}' in {response_time:.2f}s: {generated_question[:50]}...")
                     return generated_question
                 else:
                     self.logger.warning("AI generated similar or invalid question, using fallback")
                     return self._generate_fallback_question(category, conversation_state, asked_questions)
             
         except Exception as e:
-            self.logger.error(f"Error in AI question generation: {e}")
+            self.logger.error(f"Error in AI question generation for category '{category}': {e}")
             
         return None
     
@@ -893,7 +1184,7 @@ INSTRUCTIONS:
 1. Generate ONE natural question SPECIFICALLY for the category: {category}
 2. Make it conversational and build on previous responses if available
 3. Avoid repeating information already gathered
-4. Make the question specific to their research query: "{conversation_state.user_query}"
+4. Make the question directly relevant to "{conversation_state.user_query}"
 5. Keep it concise (under 25 words)
 6. Focus on actionable information that helps with recommendations
 
@@ -921,18 +1212,127 @@ Generate ONLY the question text (no explanations, quotes, or additional text):""
             import re
             question = re.sub(r'^(Question|Q|\d+\.?)\s*:?\s*', '', question, flags=re.IGNORECASE)
             
-            # Ensure it ends with a question mark
+            # Handle multi-line responses - take the first line that looks like a question
+            lines = question.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and (line.endswith('?') or any(word in line.lower() for word in ['what', 'how', 'when', 'where', 'why', 'which', 'who', 'can', 'do', 'would', 'could', 'should'])):
+                    question = line
+                    break
+            
+            # Ensure it ends with a question mark if it doesn't already
             if question and not question.endswith('?'):
                 question += '?'
             
-            # Basic validation
-            if len(question) > 5 and len(question) < 200:
-                return question
+            # More lenient validation - allow questions from 10 to 300 characters
+            if question and len(question) >= 10 and len(question) <= 300:
+                # Additional quality checks
+                if self._is_valid_question_content(question):
+                    return question
+                else:
+                    self.logger.debug(f"Question failed content validation: {question[:50]}...")
+            else:
+                self.logger.debug(f"Question failed length validation (len={len(question) if question else 0}): {question[:50] if question else 'None'}...")
                 
         except Exception as e:
             self.logger.error(f"Error extracting question from response: {e}")
             
         return None
+    
+    def _is_valid_question_content(self, question: str) -> bool:
+        """Validate question content quality."""
+        question_lower = question.lower()
+        
+        # Check for basic question indicators
+        question_words = ['what', 'how', 'when', 'where', 'why', 'which', 'who', 'can', 'do', 'would', 'could', 'should', 'are', 'is', 'will']
+        has_question_word = any(word in question_lower for word in question_words)
+        
+        # Check it's not just generic phrases
+        generic_phrases = ['let me know', 'tell me more', 'anything else', 'any other']
+        is_generic = any(phrase in question_lower for phrase in generic_phrases)
+        
+        # Check for reasonable word count (questions should have substance)
+        word_count = len(question.split())
+        
+        return has_question_word and not is_generic and word_count >= 4
+    
+    def _is_similar_question_context_aware(self, new_question: str, asked_questions: List[str], conversation_state: ConversationState) -> bool:
+        """Context-aware similarity detection that accounts for conversation progression."""
+        if not asked_questions:
+            return False
+        
+        # For later questions (3+), be more lenient to allow natural progression
+        questions_count = len(conversation_state.question_history)
+        if questions_count >= 2:
+            return self._is_similar_question_lenient(new_question, asked_questions)
+        else:
+            return self._is_similar_question(new_question, asked_questions)
+    
+    def _is_similar_question_lenient(self, new_question: str, asked_questions: List[str]) -> bool:
+        """More lenient similarity detection for advanced conversation stages."""
+        new_words = set(new_question.lower().split())
+        new_lower = new_question.lower()
+        
+        # Define semantic patterns but require MORE overlap for similarity
+        importance_patterns = ['important', 'priority', 'matter most', 'key factor', 'crucial', 'essential']
+        requirements_patterns = ['requirement', 'constraint', 'need', 'must have', 'criteria']
+        usage_patterns = ['use', 'using', 'usage', 'utilize', 'application', 'purpose']
+        preference_patterns = ['prefer', 'preference', 'like', 'want', 'choice', 'option']
+        decision_patterns = ['decision', 'choose', 'select', 'pick', 'deciding']
+        
+        # Check semantic patterns for new question
+        new_patterns = []
+        if any(pattern in new_lower for pattern in importance_patterns):
+            new_patterns.append('importance')
+        if any(pattern in new_lower for pattern in requirements_patterns):
+            new_patterns.append('requirements')
+        if any(pattern in new_lower for pattern in usage_patterns):
+            new_patterns.append('usage')
+        if any(pattern in new_lower for pattern in preference_patterns):
+            new_patterns.append('preferences')
+        if any(pattern in new_lower for pattern in decision_patterns):
+            new_patterns.append('decision')
+        
+        for asked in asked_questions:
+            asked_lower = asked.lower()
+            asked_words = set(asked_lower.split())
+            
+            # Only check recent questions (last 3) for similarity to allow topic evolution
+            if len(asked_questions) > 3 and asked not in asked_questions[-3:]:
+                continue
+            
+            # Check semantic similarity - require ALL patterns to match (more strict)
+            asked_patterns = []
+            if any(pattern in asked_lower for pattern in importance_patterns):
+                asked_patterns.append('importance')
+            if any(pattern in asked_lower for pattern in requirements_patterns):
+                asked_patterns.append('requirements')
+            if any(pattern in asked_lower for pattern in usage_patterns):
+                asked_patterns.append('usage')
+            if any(pattern in asked_lower for pattern in preference_patterns):
+                asked_patterns.append('preferences')
+            if any(pattern in asked_lower for pattern in decision_patterns):
+                asked_patterns.append('decision')
+            
+            # Require exact semantic pattern match AND significant word overlap
+            if new_patterns and asked_patterns and set(new_patterns) == set(asked_patterns):
+                # Calculate meaningful word overlap
+                common_words = new_words.intersection(asked_words)
+                meaningful_common = common_words - {
+                    'what', 'is', 'the', 'do', 'you', 'how', 'are', 'for', 'to', 'a', 'an', 'your'
+                }
+                
+                # Only mark as similar if VERY high overlap (70%+)
+                if len(meaningful_common) >= 4:
+                    overlap_ratio = len(meaningful_common) / max(len(new_words), len(asked_words))
+                    if overlap_ratio > 0.7:
+                        return True
+            
+            # Check for near-identical questions (90%+ similarity)
+            if self._calculate_similarity_ratio(new_lower, asked_lower) > 0.9:
+                return True
+        
+        return False
     
     def _generate_fallback_question(self, category: str, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
         """Generate a fallback question using simple templates when AI fails."""
@@ -962,20 +1362,89 @@ Generate ONLY the question text (no explanations, quotes, or additional text):""
     def _is_similar_question(self, new_question: str, asked_questions: List[str]) -> bool:
         """Check if a question is too similar to already asked questions."""
         new_words = set(new_question.lower().split())
+        new_lower = new_question.lower()
+        
+        # Define semantic patterns that indicate similar intent
+        importance_patterns = ['important', 'priority', 'matter most', 'key factor', 'crucial', 'essential']
+        requirements_patterns = ['requirement', 'constraint', 'need', 'must have', 'criteria']
+        usage_patterns = ['use', 'using', 'usage', 'utilize', 'application', 'purpose']
+        preference_patterns = ['prefer', 'preference', 'like', 'want', 'choice', 'option']
+        decision_patterns = ['decision', 'choose', 'select', 'pick', 'deciding']
+        
+        # Check if new question matches any semantic pattern
+        new_patterns = []
+        if any(pattern in new_lower for pattern in importance_patterns):
+            new_patterns.append('importance')
+        if any(pattern in new_lower for pattern in requirements_patterns):
+            new_patterns.append('requirements')
+        if any(pattern in new_lower for pattern in usage_patterns):
+            new_patterns.append('usage')
+        if any(pattern in new_lower for pattern in preference_patterns):
+            new_patterns.append('preferences')
+        if any(pattern in new_lower for pattern in decision_patterns):
+            new_patterns.append('decision')
         
         for asked in asked_questions:
-            asked_words = set(asked.lower().split())
+            asked_lower = asked.lower()
+            asked_words = set(asked_lower.split())
             
-            # Calculate word overlap
+            # Check semantic similarity first
+            asked_patterns = []
+            if any(pattern in asked_lower for pattern in importance_patterns):
+                asked_patterns.append('importance')
+            if any(pattern in asked_lower for pattern in requirements_patterns):
+                asked_patterns.append('requirements')
+            if any(pattern in asked_lower for pattern in usage_patterns):
+                asked_patterns.append('usage')
+            if any(pattern in asked_lower for pattern in preference_patterns):
+                asked_patterns.append('preferences')
+            if any(pattern in asked_lower for pattern in decision_patterns):
+                asked_patterns.append('decision')
+            
+            # Only consider similar if they share MULTIPLE semantic patterns AND have high word overlap
+            if new_patterns and asked_patterns:
+                common_patterns = set(new_patterns).intersection(set(asked_patterns))
+                # Require at least 2 shared patterns for semantic similarity
+                if len(common_patterns) >= 2:
+                    return True
+            
+            # Calculate word overlap for additional check (make it more lenient)
             common_words = new_words.intersection(asked_words)
-            # Exclude common question words
-            meaningful_common = common_words - {'what', 'is', 'your', 'the', 'do', 'you', 'how', 'are', 'for', 'to', 'a', 'an'}
+            # Exclude common question words (but keep fewer to allow more variety)
+            meaningful_common = common_words - {
+                'what', 'is', 'the', 'do', 'you', 'how', 'are', 'for', 'to', 'a', 'an'
+            }
             
-            # If more than 2 meaningful words overlap, consider it similar
-            if len(meaningful_common) >= 2:
+            # Require at least 3 meaningful words to overlap AND high similarity ratio
+            if len(meaningful_common) >= 3:
+                overlap_ratio = len(meaningful_common) / max(len(new_words), len(asked_words))
+                # Only mark as similar if over 50% overlap
+                if overlap_ratio > 0.5:
+                    return True
+            
+            # Additional check: very similar sentence structure
+            # Use basic edit distance for near-exact matches
+            if self._calculate_similarity_ratio(new_lower, asked_lower) > 0.8:
                 return True
         
         return False
+    
+    def _calculate_similarity_ratio(self, text1: str, text2: str) -> float:
+        """Calculate similarity ratio between two text strings."""
+        # Simple character-based similarity for very similar questions
+        if len(text1) == 0 or len(text2) == 0:
+            return 0.0
+        
+        # Calculate character overlap
+        chars1 = set(text1.replace(' ', ''))
+        chars2 = set(text2.replace(' ', ''))
+        common_chars = chars1.intersection(chars2)
+        
+        total_chars = chars1.union(chars2)
+        if len(total_chars) == 0:
+            return 0.0
+            
+        return len(common_chars) / len(total_chars)
     
     def _generate_contextual_question(self, category: str, conversation_state: ConversationState) -> str:
         """Generate a contextual question when templates don't work."""
@@ -1007,3 +1476,18 @@ Generate ONLY the question text (no explanations, quotes, or additional text):""
         }
         
         return contextual_questions.get(category, f"Can you share more details about your {category} regarding {user_query}?")
+    
+    def _extract_product_type(self, query_lower: str) -> str:
+        """Extract product type from query for natural conversation."""
+        if 'smartphone' in query_lower or 'phone' in query_lower:
+            return 'smartphone'
+        elif 'laptop' in query_lower:
+            return 'laptop'
+        elif 'computer' in query_lower:
+            return 'computer'
+        elif 'camera' in query_lower:
+            return 'camera'
+        elif any(word in query_lower for word in ['device', 'gadget']):
+            return 'device'
+        else:
+            return 'product'

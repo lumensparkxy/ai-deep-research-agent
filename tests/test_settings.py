@@ -159,6 +159,182 @@ class TestSettings:
             assert settings.logger is not None
             assert settings.debug_mode is True
     
+    def test_dynamic_personalization_settings(self):
+        """Test dynamic personalization settings are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test dynamic personalization settings
+            dp_settings = settings.dynamic_personalization
+            assert dp_settings.enabled is True
+            assert dp_settings.fallback_to_static is True
+            assert dp_settings.max_questions == 10
+            assert dp_settings.min_questions == 3
+            assert dp_settings.timeout_seconds == 300
+            assert dp_settings.ai_question_generation is True
+            assert dp_settings.context_analysis is True
+            assert dp_settings.completion_assessment is True
+    
+    def test_ai_question_generation_settings(self):
+        """Test AI question generation settings are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test AI question generation settings
+            ai_settings = settings.ai_question_generation
+            assert ai_settings.enabled is True
+            assert ai_settings.temperature == 0.7
+            assert ai_settings.top_p == 0.9
+            assert ai_settings.max_tokens == 200
+            assert ai_settings.question_validation is True
+            assert ai_settings.duplicate_detection is True
+            assert ai_settings.relevance_threshold == 0.6
+    
+    def test_context_analysis_settings(self):
+        """Test context analysis settings are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test context analysis settings
+            context_settings = settings.context_analysis
+            assert context_settings.enabled is True
+            assert context_settings.confidence_threshold == 0.6
+            assert context_settings.budget_weight == 0.8
+            assert context_settings.timeline_weight == 0.9
+            assert context_settings.quality_weight == 0.7
+            assert context_settings.convenience_weight == 0.6
+            assert context_settings.communication_style is True
+            assert context_settings.expertise_level is True
+            assert context_settings.decision_making_style is True
+            assert context_settings.emotional_indicators is True
+            assert context_settings.critical_gap_threshold == 0.8
+            assert context_settings.importance_weighting is True
+            assert context_settings.research_impact_scoring is True
+    
+    def test_user_preferences_settings(self):
+        """Test user preferences settings are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test user preferences settings
+            pref_settings = settings.user_preferences
+            assert pref_settings.storage_enabled is True
+            assert pref_settings.storage_location == "data/user_preferences"
+            assert pref_settings.session_learning is True
+            assert pref_settings.cross_session_patterns is False
+            assert pref_settings.preference_expiry_days == 30
+    
+    def test_performance_settings(self):
+        """Test performance settings are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test performance settings
+            perf_settings = settings.performance
+            assert perf_settings.ai_response_timeout == 10
+            assert perf_settings.concurrent_analysis is False
+            assert perf_settings.cache_question_templates is True
+            assert perf_settings.context_analysis_depth == "standard"
+    
+    def test_conversation_mode_configuration(self):
+        """Test conversation mode configurations are properly loaded."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test getting specific conversation modes
+            quick_mode = settings.get_conversation_mode_config("quick")
+            assert quick_mode.max_questions == 3
+            assert quick_mode.time_sensitivity_threshold == 0.8
+            assert quick_mode.question_depth == "surface"
+            assert "concise" in quick_mode.ai_prompt_modifier.lower()
+            
+            standard_mode = settings.get_conversation_mode_config("standard")
+            assert standard_mode.max_questions == 6
+            assert standard_mode.time_sensitivity_threshold == 0.5
+            assert standard_mode.question_depth == "moderate"
+            
+            deep_mode = settings.get_conversation_mode_config("deep")
+            assert deep_mode.max_questions == 12
+            assert deep_mode.time_sensitivity_threshold == 0.2
+            assert deep_mode.question_depth == "comprehensive"
+            
+            # Test fallback for invalid mode
+            invalid_mode = settings.get_conversation_mode_config("invalid")
+            assert invalid_mode.max_questions == 6  # Falls back to standard
+    
+    def test_fallback_questions(self):
+        """Test fallback questions for different categories."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test category-specific fallback questions
+            tech_questions = settings.get_fallback_questions("technology")
+            assert isinstance(tech_questions, list)
+            assert len(tech_questions) > 0
+            
+            health_questions = settings.get_fallback_questions("health")
+            assert isinstance(health_questions, list)
+            assert len(health_questions) > 0
+            
+            # Test fallback for invalid category
+            other_questions = settings.get_fallback_questions("invalid_category")
+            assert isinstance(other_questions, list)
+            assert len(other_questions) > 0
+    
+    def test_available_conversation_modes(self):
+        """Test getting list of available conversation modes."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            modes = settings.available_conversation_modes
+            assert isinstance(modes, list)
+            assert "quick" in modes
+            assert "standard" in modes
+            assert "deep" in modes
+            assert "adaptive" in modes
+    
+    def test_environment_overrides(self):
+        """Test environment-specific setting overrides."""
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+            settings = Settings()
+            
+            # Test getting environment override (should return None for non-existent setting)
+            override = settings.get_environment_override("dynamic_personalization.max_questions")
+            assert override is None  # Production environment doesn't override this in test config
+            
+            # Test with default value
+            override_with_default = settings.get_environment_override(
+                "nonexistent.setting", default="default_value"
+            )
+            assert override_with_default == "default_value"
+    
+    def test_user_preferences_directory_creation(self, temp_dir):
+        """Test that user preferences directory is created."""
+        custom_session_path = str(temp_dir / "custom_sessions")
+        custom_report_path = str(temp_dir / "custom_reports")
+        custom_prefs_path = str(temp_dir / "custom_user_prefs")
+        
+        config_data = {
+            "user_preferences": {
+                "storage_location": custom_prefs_path
+            }
+        }
+        
+        config_file = temp_dir / "test_config.yaml"
+        with open(config_file, 'w') as f:
+            yaml.dump(config_data, f)
+        
+        with patch.dict(os.environ, {
+            "GEMINI_API_KEY": "test_key",
+            "SESSION_STORAGE_PATH": custom_session_path,
+            "REPORT_OUTPUT_PATH": custom_report_path
+        }, clear=True):
+            settings = Settings(config_path=str(config_file))
+            
+            assert Path(custom_session_path).exists()
+            assert Path(custom_report_path).exists()
+            assert Path(custom_prefs_path).exists()
+    
     @pytest.fixture
     def temp_dir(self):
         """Create temporary directory for testing."""
