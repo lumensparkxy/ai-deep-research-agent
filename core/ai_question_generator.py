@@ -66,15 +66,17 @@ class QuestionGenerationResult:
 class AIQuestionGenerator:
     """AI-powered question generation system using Gemini API."""
     
-    def __init__(self, gemini_client: Optional[genai.Client] = None):
+    def __init__(self, gemini_client: Optional[genai.Client] = None, model_name: str = "gemini-2.0-flash-001"):
         """
         Initialize the AI question generator.
         
         Args:
             gemini_client: Configured Gemini client for AI analysis
+            model_name: Name of the Gemini model to use for generation
         """
         self.logger = logging.getLogger(__name__)
         self.gemini_client = gemini_client
+        self.model_name = model_name
         
         # Generation settings
         self.max_questions_per_request = 5
@@ -322,13 +324,13 @@ class AIQuestionGenerator:
                 if hasattr(self.gemini_client, 'aio'):
                     # Async call
                     response = await self.gemini_client.aio.models.generate_content(
-                        model='gemini-2.0-flash-001',  # Default model
+                        model=self.model_name,
                         contents=prompt
                     )
                 else:
                     # Sync call wrapped in async
                     response = self.gemini_client.models.generate_content(
-                        model='gemini-2.0-flash-001',  # Default model
+                        model=self.model_name,
                         contents=prompt
                     )
                 return response

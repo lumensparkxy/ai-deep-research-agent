@@ -33,7 +33,10 @@ class ConversationHandler:
         try:
             from google import genai
             gemini_client = genai.Client(api_key=settings.gemini_api_key)
-            self.personalization_engine = DynamicPersonalizationEngine(gemini_client)
+            self.personalization_engine = DynamicPersonalizationEngine(
+                gemini_client=gemini_client,
+                model_name=settings.ai_model
+            )
         except Exception as e:
             self.logger.warning(f"Could not initialize personalization engine: {e}")
             self.personalization_engine = None
