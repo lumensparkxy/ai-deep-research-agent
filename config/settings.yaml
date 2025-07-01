@@ -142,7 +142,7 @@ ai_question_generation:
   model_settings:
     temperature: 0.7
     top_p: 0.9
-    max_tokens: 200
+    max_tokens: 1024
   
   # Question Quality Controls
   question_validation: true
@@ -197,7 +197,7 @@ environments:
   development:
     dynamic_personalization:
       max_questions: 5  # Faster testing
-      timeout_seconds: 60
+      timeout_seconds: 300
     performance:
       ai_response_timeout: 5
       
