@@ -183,9 +183,9 @@ class TestSettings:
             # Test AI question generation settings
             ai_settings = settings.ai_question_generation
             assert ai_settings.enabled is True
-            assert ai_settings.temperature == 0.8
-            assert ai_settings.top_p == 0.9
-            assert ai_settings.max_tokens == 2000
+            assert ai_settings.temperature == 0.9
+            assert ai_settings.top_p == 0.95
+            assert ai_settings.max_tokens == 4000
             assert ai_settings.question_validation is True
             assert ai_settings.duplicate_detection is True
             assert ai_settings.relevance_threshold == 0.6

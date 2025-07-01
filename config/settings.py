@@ -43,9 +43,9 @@ class DynamicPersonalizationSettings:
 class AIQuestionGenerationSettings:
     """Settings for AI question generation."""
     enabled: bool = True
-    temperature: float = 0.8
-    top_p: float = 0.9
-    max_tokens: int = 2000
+    temperature: float = 0.9
+    top_p: float = 0.95
+    max_tokens: int = 4000
     question_validation: bool = True
     duplicate_detection: bool = True
     relevance_threshold: float = 0.6
@@ -443,9 +443,9 @@ class Settings:
         model_settings = config.get("model_settings", {})
         return AIQuestionGenerationSettings(
             enabled=config.get("enabled", True),
-            temperature=model_settings.get("temperature", 0.8),
-            top_p=model_settings.get("top_p", 0.9),
-            max_tokens=model_settings.get("max_tokens", 2000),
+            temperature=model_settings.get("temperature", 0.9),
+            top_p=model_settings.get("top_p", 0.95),
+            max_tokens=model_settings.get("max_tokens", 4000),
             question_validation=config.get("question_validation", True),
             duplicate_detection=config.get("duplicate_detection", True),
             relevance_threshold=config.get("relevance_threshold", 0.6)

@@ -86,10 +86,10 @@ class AIQuestionGenerator:
             self.temperature = ai_settings.temperature
             self.top_p = ai_settings.top_p
         else:
-            # Default settings for engaging questions
-            self.max_tokens = 2000
-            self.temperature = 0.8  # Higher temperature for more creative questions
-            self.top_p = 0.9
+            # Default settings for highly engaging, creative questions
+            self.max_tokens = 4000  # Increased for more detailed responses
+            self.temperature = 0.9  # Higher temperature for more creativity
+            self.top_p = 0.95  # Even more diverse vocabulary
         
         # Generation settings
         self.max_questions_per_request = 5
@@ -333,11 +333,13 @@ class AIQuestionGenerator:
         """Query Gemini with retry logic."""
         for attempt in range(self.api_retry_attempts):
             try:
-                # Create generation config
+                # Create generation config with maximum creative freedom
                 generation_config = {
                     'max_output_tokens': self.max_tokens,
                     'temperature': self.temperature,
-                    'top_p': self.top_p
+                    'top_p': self.top_p,
+                    'candidate_count': 1,  # Single response but highly creative
+                    'stop_sequences': None,  # No stop sequences to limit creativity
                 }
                 
                 # Use the new google-genai client API
@@ -402,63 +404,77 @@ Example response:
     ) -> str:
         """Create prompt for question generation."""
         context_summary = self._extract_context_summary(conversation_state)
-        focus_str = ", ".join(focus_areas) if focus_areas else "general personalization"
+        focus_str = ", ".join(focus_areas) if focus_areas else "understanding their unique situation"
         
-        return f"""You are an expert conversation designer helping to create engaging, natural questions for a personalized research consultation. Your goal is to generate thoughtful, conversational questions that feel human and spark genuine engagement.
+        return f"""You are an exceptionally skilled conversation expert who specializes in creating deeply engaging, thought-provoking questions. You're like that friend who asks the most interesting questions at dinner parties - the ones that make people light up and share stories they've never told before.
 
 CONVERSATION CONTEXT:
-- User's Question: {conversation_state.user_query}
-- Intent: {intent_analysis.primary_intent.value} (confidence: {intent_analysis.confidence:.2f})
-- Domain: {intent_analysis.domain}
-- Information Already Gathered: {json.dumps(context_summary, indent=2)}
-- Focus Areas: {focus_str}
+- User's Original Question: "{conversation_state.user_query}"
+- Their Intent: {intent_analysis.primary_intent.value} ({intent_analysis.confidence:.0%} confidence)
+- Subject Domain: {intent_analysis.domain}
+- What We Already Know: {json.dumps(context_summary, indent=2) if context_summary.get('user_profile') else "This is our first exchange"}
+- Current Focus: {focus_str}
 
-TASK: Generate {max_questions} engaging follow-up questions that:
-1. Feel natural and conversational (like a knowledgeable friend asking)
-2. Spark curiosity and deeper thinking about the user's needs
-3. Gather missing information crucial for personalized recommendations
-4. Build naturally on what's already been discussed
-5. Show genuine interest in the user's specific situation
-6. Avoid feeling like a form or checklist
+YOUR MISSION:
+Create {max_questions} absolutely captivating questions that feel like genuine curiosity from someone who truly cares about helping them. These should be the kind of questions that make people think "Wow, that's exactly what I needed to consider!" or "I never thought about it that way before!"
 
-STYLE GUIDELINES:
-- Use conversational language, not formal business speak
-- Ask open-ended questions that invite storytelling
-- Show empathy and understanding of their situation
-- Use "you" and make it personal
-- Vary question length and structure for natural flow
-- Sometimes start with context: "I'm curious..." or "To better understand..."
+CONVERSATION STYLE TO EMULATE:
+Think of yourself as a master consultant who:
+- Asks questions that reveal hidden insights and overlooked angles
+- Shows genuine fascination with their unique situation  
+- Helps people discover things about themselves they didn't know
+- Makes complex decisions feel manageable and exciting
+- Uses storytelling prompts to unlock rich details
+- Connects emotional and practical considerations naturally
 
-Generate questions that cover different angles:
-- Practical constraints and preferences
-- Emotional factors and motivations
-- Past experiences and lessons learned
-- Future vision and goals
-- Specific use cases and scenarios
+QUESTION CRAFTING PRINCIPLES:
+✨ **Be Genuinely Curious**: Ask like you're truly fascinated by their story
+✨ **Invite Storytelling**: Frame questions to elicit vivid, detailed responses
+✨ **Connect Past & Future**: Link their experiences to their aspirations
+✨ **Reveal Hidden Factors**: Uncover considerations they might not have thought of
+✨ **Make It Personal**: Reference their specific situation, not generic scenarios
+✨ **Show Insight**: Demonstrate you understand the deeper implications
+✨ **Create Aha Moments**: Ask questions that spark new realizations
 
-Respond with a JSON array where each question object contains:
-- question: the conversational question text (aim for 15-40 words for natural flow)
-- question_type: one of [open_ended, multiple_choice, scale, boolean, clarification, follow_up]
-- category: information category (budget, timeline, preferences, constraints, experience, goals, etc.)
-- priority: 0.0-1.0 importance score
-- context_relevance: 0.0-1.0 relevance to current context
-- expected_answer_type: text, choice, scale, or boolean
-- follow_up_potential: 0.0-1.0 likelihood to lead to more questions
-- reasoning: why this question adds value to the conversation
+EXAMPLES OF ENGAGING VS. BORING:
+❌ Boring: "What's your budget?"
+✅ Engaging: "I'm curious about the investment side of this - what feels like the sweet spot where you'd be excited about the value you're getting without any buyer's remorse keeping you up at night?"
 
-Example of engaging questions:
+❌ Boring: "What features do you need?"
+✅ Engaging: "Paint me a picture of your ideal experience with this - walk me through what a perfect day using it would look like, from the moment you first interact with it."
+
+❌ Boring: "When do you need this?"
+✅ Engaging: "What's the story behind your timing? Is there a particular moment or event that's driving this decision, or is it more of a 'the stars are finally aligning' situation?"
+
+RESPONSE FORMAT:
+Generate questions as a JSON array with rich, conversational questions (aim for 25-60 words each to allow for context and nuance):
+
 [
   {{
-    "question": "What's driving this decision for you right now - is there something specific that sparked your interest?",
+    "question": "Your beautifully crafted, engaging question here that feels conversational and insightful",
     "question_type": "open_ended",
-    "category": "motivation",
-    "priority": 0.9,
-    "context_relevance": 0.95,
+    "category": "motivation/timeline/preferences/constraints/experience/goals/context/etc",
+    "priority": 0.0-1.0,
+    "context_relevance": 0.0-1.0,
     "expected_answer_type": "text",
-    "follow_up_potential": 0.8,
-    "reasoning": "Understanding motivation helps personalize recommendations and shows genuine interest"
+    "follow_up_potential": 0.0-1.0,
+    "reasoning": "Why this question creates engagement and reveals important insights"
   }}
-]"""
+]
+
+INSPIRING QUESTION STARTERS TO CONSIDER:
+- "I'm really curious about..."
+- "What's the story behind..."
+- "Paint me a picture of..."
+- "I'd love to understand..."
+- "What would it feel like if..."
+- "Take me back to when..."
+- "Imagine if you could..."
+- "What's been on your mind about..."
+- "If you could wave a magic wand..."
+- "What would surprise people to know about..."
+
+Now create {max_questions} questions that will make this person excited to share their story and feel truly understood!"""
     
     def _parse_intent_response(self, response_text: str) -> IntentAnalysis:
         """Parse AI response into IntentAnalysis object."""
