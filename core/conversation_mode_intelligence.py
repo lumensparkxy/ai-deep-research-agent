@@ -426,9 +426,13 @@ class ConversationModeIntelligence:
                 key, value = line.split(':', 1)
                 signals_data[key.strip().upper()] = value.strip()
         
+        # Normalize enum values to lowercase
+        urgency_value = signals_data.get('URGENCY', 'medium').lower()
+        complexity_value = signals_data.get('COMPLEXITY', 'balanced').lower()
+        
         return UserSignals(
-            urgency_level=UrgencyLevel(signals_data.get('URGENCY', 'medium')),
-            complexity_preference=ComplexityPreference(signals_data.get('COMPLEXITY', 'balanced')),
+            urgency_level=UrgencyLevel(urgency_value),
+            complexity_preference=ComplexityPreference(complexity_value),
             context_type=signals_data.get('CONTEXT', 'general'),
             language_indicators=signals_data.get('LANGUAGE_INDICATORS', '').split(','),
             engagement_score=float(signals_data.get('ENGAGEMENT', '0.7')),
@@ -445,11 +449,15 @@ class ConversationModeIntelligence:
                 key, value = line.split(':', 1)
                 rec_data[key.strip().upper()] = value.strip()
         
+        # Normalize mode values to lowercase
+        mode_value = rec_data.get('MODE', 'standard').lower()
+        fallback_value = rec_data.get('FALLBACK', 'quick').lower()
+        
         return ModeRecommendation(
-            recommended_mode=ConversationMode(rec_data.get('MODE', 'standard')),
+            recommended_mode=ConversationMode(mode_value),
             confidence_score=float(rec_data.get('CONFIDENCE', '0.7')),
             reasoning=rec_data.get('REASONING', 'Standard recommendation'),
-            fallback_mode=ConversationMode(rec_data.get('FALLBACK', 'quick')),
+            fallback_mode=ConversationMode(fallback_value),
             adaptation_triggers=rec_data.get('TRIGGERS', '').split(',')
         )
 

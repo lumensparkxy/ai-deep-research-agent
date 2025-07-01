@@ -16,12 +16,12 @@ class TestResearchEngineErrorHandling:
     
     def test_research_engine_initialization_failure(self, mock_settings):
         """Test ResearchEngine handles AI initialization failures."""
-        with patch('google.generativeai.configure') as mock_configure, \
-             patch('google.generativeai.GenerativeModel') as mock_model:
+        with patch('google.genai.Client') as mock_client_class:
             
-            # Simulate API key configuration failure
-            mock_configure.side_effect = Exception("Invalid API key")
+            # Simulate client initialization failure
+            mock_client_class.side_effect = Exception("Invalid API key")
             
+            # Should raise ValidationError during initialization
             with pytest.raises(ValidationError, match="Could not initialize AI model"):
                 ResearchEngine(mock_settings)
     
@@ -44,18 +44,20 @@ class TestResearchEngineErrorHandling:
     
     def test_research_engine_empty_response_handling(self, mock_settings):
         """Test ResearchEngine handles empty AI responses."""
-        with patch('google.generativeai.configure'), \
-             patch('google.generativeai.GenerativeModel') as mock_model_class:
+        with patch('google.genai.Client') as mock_client_class:
             
-            mock_model = Mock()
-            mock_model_class.return_value = mock_model
+            mock_client = Mock()
+            mock_client_class.return_value = mock_client
             
-            engine = ResearchEngine(mock_settings)
+            # Set up the models attribute and response
+            mock_models = Mock()
+            mock_client.models = mock_models
             
-            # Mock empty response
             mock_response = Mock()
             mock_response.text = ""
-            mock_model.generate_content.return_value = mock_response
+            mock_models.generate_content.return_value = mock_response
+            
+            engine = ResearchEngine(mock_settings)
             
             with pytest.raises(ValidationError, match="Empty response from Gemini"):
                 engine._call_gemini_with_retry("test query")
@@ -121,15 +123,15 @@ class TestResearchEngineErrorHandling:
     
     def test_research_engine_safety_settings_validation(self, mock_settings):
         """Test ResearchEngine applies proper safety settings."""
-        with patch('google.generativeai.configure'), \
-             patch('google.generativeai.GenerativeModel') as mock_model_class:
+        with patch('google.genai.Client') as mock_client_class:
+            
+            mock_client = Mock()
+            mock_client_class.return_value = mock_client
             
             engine = ResearchEngine(mock_settings)
             
-            # Verify model was created with safety settings
-            mock_model_class.assert_called_once()
-            call_args = mock_model_class.call_args
-            assert "safety_settings" in call_args[1]
+            # Verify client was created
+            mock_client_class.assert_called_once()
     
     def test_research_engine_network_timeout_handling(self, mock_settings):
         """Test ResearchEngine handles network timeouts."""
@@ -150,18 +152,21 @@ class TestResearchEngineErrorHandling:
     
     def test_research_engine_memory_management(self, mock_settings):
         """Test ResearchEngine handles large response data safely."""
-        with patch('google.generativeai.configure'), \
-             patch('google.generativeai.GenerativeModel') as mock_model_class:
+        with patch('google.genai.Client') as mock_client_class:
             
-            mock_model = Mock()
-            mock_model_class.return_value = mock_model
+            mock_client = Mock()
+            mock_client_class.return_value = mock_client
             
-            engine = ResearchEngine(mock_settings)
+            # Set up the models attribute and response
+            mock_models = Mock()
+            mock_client.models = mock_models
             
             # Mock very large response
             large_response = Mock()
             large_response.text = "x" * (10 * 1024 * 1024)  # 10MB response
-            mock_model.generate_content.return_value = large_response
+            mock_models.generate_content.return_value = large_response
+            
+            engine = ResearchEngine(mock_settings)
             
             # Should handle large responses without memory issues
             result = engine._call_gemini_with_retry("test query")

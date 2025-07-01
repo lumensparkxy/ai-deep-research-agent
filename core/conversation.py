@@ -543,3 +543,193 @@ class ConversationHandler:
                     
             except (KeyboardInterrupt, EOFError):
                 raise
+    
+    def _get_mode_question_prefix(self, mode: ConversationMode, question_num: int, max_questions: int) -> str:
+        """
+        Get mode-specific question prefix formatting.
+        
+        Args:
+            mode: Current conversation mode
+            question_num: Current question number
+            max_questions: Maximum questions for this mode
+            
+        Returns:
+            Formatted question prefix
+        """
+        mode_prefixes = {
+            ConversationMode.QUICK: f"⚡ Quick Question {question_num}/{max_questions}:",
+            ConversationMode.STANDARD: f"📋 Question {question_num}/{max_questions}:",
+            ConversationMode.DEEP: f"🔍 Deep Question {question_num}/{max_questions}:",
+            ConversationMode.ADAPTIVE: f"🎯 Adaptive Question {question_num}/{max_questions}:"
+        }
+        return mode_prefixes.get(mode, f"❓ Question {question_num}/{max_questions}:")
+    
+    def _get_mode_acknowledgment(self, mode: ConversationMode, question_num: int) -> str:
+        """
+        Get mode-specific acknowledgment message.
+        
+        Args:
+            mode: Current conversation mode
+            question_num: Current question number
+            
+        Returns:
+            Acknowledgment message
+        """
+        mode_acknowledgments = {
+            ConversationMode.QUICK: "✓ Got it!",
+            ConversationMode.STANDARD: "✓ Thanks, that helps!",
+            ConversationMode.DEEP: "✓ Excellent detail, thank you!",
+            ConversationMode.ADAPTIVE: "✓ Understood!"
+        }
+        return mode_acknowledgments.get(mode, "✓ Thank you!")
+    
+    def _determine_new_mode(self, current_mode: ConversationMode, 
+                           engagement_metrics: EngagementMetrics, 
+                           user_signals: UserSignals) -> ConversationMode:
+        """
+        Determine new conversation mode based on engagement and signals.
+        
+        Args:
+            current_mode: Current conversation mode
+            engagement_metrics: Current engagement data
+            user_signals: User preference signals
+            
+        Returns:
+            New conversation mode
+        """
+        # If user shows impatience, switch to quicker mode
+        if engagement_metrics.impatience_indicators:
+            if current_mode == ConversationMode.DEEP:
+                return ConversationMode.STANDARD
+            elif current_mode == ConversationMode.STANDARD:
+                return ConversationMode.QUICK
+        
+        # If user requests more detail, switch to deeper mode
+        if engagement_metrics.detail_request_frequency > 1:
+            if current_mode == ConversationMode.QUICK:
+                return ConversationMode.STANDARD
+            elif current_mode == ConversationMode.STANDARD:
+                return ConversationMode.DEEP
+        
+        # If responses are getting shorter, user might be losing interest
+        if engagement_metrics.response_length_trend == "decreasing":
+            if current_mode != ConversationMode.QUICK:
+                return ConversationMode.QUICK
+        
+        # If responses are getting longer, user is more engaged
+        if engagement_metrics.response_length_trend == "increasing":
+            if current_mode == ConversationMode.QUICK:
+                return ConversationMode.STANDARD
+        
+        return current_mode
+    
+    def _show_personalization_completion(self, mode: ConversationMode, 
+                                       question_count: int, 
+                                       context: Dict[str, Any]) -> None:
+        """
+        Show completion message for personalization phase.
+        
+        Args:
+            mode: Final conversation mode used
+            question_count: Number of questions asked
+            context: Gathered context information
+        """
+        print(f"\n✅ Personalization complete using {mode.value.title()} Mode!")
+        print(f"   Asked {question_count} questions to understand your needs")
+        
+        # Show brief summary of gathered information
+        info_count = 0
+        if context.get('user_info'):
+            info_count += len(context['user_info'])
+        if context.get('preferences'):
+            info_count += len(context['preferences'])
+        if context.get('constraints'):
+            info_count += len(context['constraints'])
+        
+        if info_count > 0:
+            print(f"   Gathered {info_count} key pieces of information for personalization")
+        
+        print("   Now I can provide more targeted and relevant recommendations!")
+
+    def confirm_action(self, message: str) -> bool:
+        """
+        Confirm an action with the user.
+        
+        Args:
+            message: Message to display for confirmation
+            
+        Returns:
+            True if user confirms, False otherwise
+        """
+        try:
+            while True:
+                response = input(f"{message} (y/n): ").strip().lower()
+                if response in ['y', 'yes', '']:
+                    return True
+                elif response in ['n', 'no']:
+                    return False
+                else:
+                    print("Please answer 'y' for yes or 'n' for no.")
+        except (KeyboardInterrupt, EOFError):
+            return False
+
+    def display_progress(self, stage: int, stage_name: str, action: str, total_stages: int = 6) -> None:
+        """
+        Display progress information.
+        
+        Args:
+            stage: Current stage number
+            stage_name: Name of the current stage
+            action: Description of current action
+            total_stages: Total number of stages
+        """
+        progress_percentage = (stage / total_stages) * 100
+        progress_bar_length = 20
+        filled_length = int(progress_bar_length * stage // total_stages)
+        
+        bar = '█' * filled_length + '░' * (progress_bar_length - filled_length)
+        
+        print(f"\n🔍 STAGE {stage}/{total_stages}: {stage_name}")
+        print(f"   {action}")
+        print(f"   Progress: [{bar}] {progress_percentage:.0f}%")
+
+    def display_error(self, error_message: str, is_recoverable: bool = True) -> None:
+        """
+        Display error message to user.
+        
+        Args:
+            error_message: Error message to display
+            is_recoverable: Whether the error is recoverable
+        """
+        print(f"\n❌ {error_message}")
+        
+        if is_recoverable:
+            print("   Attempting to continue...")
+        else:
+            print("   This error cannot be recovered from automatically.")
+
+    def _show_completion_message(self, session_id: str, report_path: str = None, research_results: Dict[str, Any] = None) -> None:
+        """
+        Show completion message after research is done.
+        
+        Args:
+            session_id: ID of the completed session
+            report_path: Path to the saved report
+            research_results: Research results data
+        """
+        print("\n" + "=" * 60)
+        print("🎉 Research Complete!")
+        print("=" * 60)
+        
+        print(f"✅ Research session saved: {session_id}")
+        if report_path:
+            print(f"✅ Report saved to: {report_path}")
+        else:
+            print("✅ Report generated and saved successfully")
+            
+        if research_results and "confidence_score" in research_results:
+            confidence = research_results["confidence_score"]
+            print(f"📊 Research confidence: {confidence:.1%}")
+        
+        print("\nThank you for using Deep Research Agent!")
+        print("=" * 60)

@@ -33,7 +33,9 @@ class TestCompletionAssessment:
                 "context_dependency": ["background"]
             }
         ]'''
-        client.generate_content.return_value = mock_response
+        # Set up the nested models attribute
+        client.models = Mock()
+        client.models.generate_content.return_value = mock_response
         return client
     
     @pytest.fixture

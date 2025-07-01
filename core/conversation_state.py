@@ -11,12 +11,17 @@ from datetime import datetime
 from enum import Enum
 
 
-class ConversationMode(Enum):
-    """Enumeration of conversation modes for different interaction types."""
-    QUICK = "quick"
-    STANDARD = "standard"
-    DEEP = "deep"
-    ITERATIVE = "iterative"
+# Import ConversationMode from conversation_mode_intelligence to avoid duplicate definitions
+try:
+    from .conversation_mode_intelligence import ConversationMode
+except ImportError:
+    # Fallback definition if circular import occurs
+    class ConversationMode(Enum):
+        """Enumeration of conversation modes for different interaction types."""
+        QUICK = "quick"
+        STANDARD = "standard"
+        DEEP = "deep"
+        ADAPTIVE = "adaptive"
 
 
 class QuestionType(Enum):

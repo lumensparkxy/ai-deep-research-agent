@@ -27,7 +27,7 @@ class TestSettings:
 
             assert settings.app_name == "Deep Research Agent"
             assert settings.gemini_api_key == "test_key"
-            assert settings.ai_model == "gemini-1.5-pro-latest"
+            assert settings.ai_model == "gemini-2.5-flash"
             assert settings.debug_mode is False
 
     def test_settings_missing_api_key(self):
@@ -298,9 +298,10 @@ class TestSettings:
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
             settings = Settings()
             
-            # Test getting environment override (should return None for non-existent setting)
+            # Test getting environment override in production (default environment)
+            # In production environment, max_questions is overridden to 12
             override = settings.get_environment_override("dynamic_personalization.max_questions")
-            assert override is None  # Production environment doesn't override this in test config
+            assert override == 12  # Production environment overrides this to 12
             
             # Test with default value
             override_with_default = settings.get_environment_override(
