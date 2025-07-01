@@ -42,7 +42,8 @@ class ConversationHandler:
             gemini_client = genai.Client(api_key=settings.gemini_api_key)
             self.personalization_engine = DynamicPersonalizationEngine(
                 gemini_client=gemini_client,
-                model_name=settings.ai_model
+                model_name=settings.ai_model,
+                settings=settings
             )
             
             # Initialize Conversation Mode Intelligence

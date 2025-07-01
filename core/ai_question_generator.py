@@ -66,17 +66,30 @@ class QuestionGenerationResult:
 class AIQuestionGenerator:
     """AI-powered question generation system using Gemini API."""
     
-    def __init__(self, gemini_client: Optional[genai.Client] = None, model_name: str = "gemini-2.0-flash-001"):
+    def __init__(self, gemini_client: Optional[genai.Client] = None, model_name: str = "gemini-2.5-flash", settings: Optional[Any] = None):
         """
         Initialize the AI question generator.
         
         Args:
             gemini_client: Configured Gemini client for AI analysis
             model_name: Name of the Gemini model to use for generation
+            settings: Configuration settings for question generation
         """
         self.logger = logging.getLogger(__name__)
         self.gemini_client = gemini_client
         self.model_name = model_name
+        
+        # Load settings if provided
+        if settings and hasattr(settings, 'ai_question_generation'):
+            ai_settings = settings.ai_question_generation
+            self.max_tokens = ai_settings.max_tokens
+            self.temperature = ai_settings.temperature
+            self.top_p = ai_settings.top_p
+        else:
+            # Default settings for engaging questions
+            self.max_tokens = 2000
+            self.temperature = 0.8  # Higher temperature for more creative questions
+            self.top_p = 0.9
         
         # Generation settings
         self.max_questions_per_request = 5
@@ -320,18 +333,27 @@ class AIQuestionGenerator:
         """Query Gemini with retry logic."""
         for attempt in range(self.api_retry_attempts):
             try:
+                # Create generation config
+                generation_config = {
+                    'max_output_tokens': self.max_tokens,
+                    'temperature': self.temperature,
+                    'top_p': self.top_p
+                }
+                
                 # Use the new google-genai client API
                 if hasattr(self.gemini_client, 'aio'):
                     # Async call
                     response = await self.gemini_client.aio.models.generate_content(
                         model=self.model_name,
-                        contents=prompt
+                        contents=prompt,
+                        config=types.GenerateContentConfig(**generation_config)
                     )
                 else:
                     # Sync call wrapped in async
                     response = self.gemini_client.models.generate_content(
                         model=self.model_name,
-                        contents=prompt
+                        contents=prompt,
+                        config=types.GenerateContentConfig(**generation_config)
                     )
                 return response
                 
@@ -382,42 +404,59 @@ Example response:
         context_summary = self._extract_context_summary(conversation_state)
         focus_str = ", ".join(focus_areas) if focus_areas else "general personalization"
         
-        return f"""Generate {max_questions} follow-up questions for a personalization conversation:
+        return f"""You are an expert conversation designer helping to create engaging, natural questions for a personalized research consultation. Your goal is to generate thoughtful, conversational questions that feel human and spark genuine engagement.
 
-USER QUERY: {conversation_state.user_query}
-INTENT: {intent_analysis.primary_intent.value} (confidence: {intent_analysis.confidence:.2f})
-DOMAIN: {intent_analysis.domain}
-EXISTING INFO: {json.dumps(context_summary, indent=2)}
-FOCUS AREAS: {focus_str}
+CONVERSATION CONTEXT:
+- User's Question: {conversation_state.user_query}
+- Intent: {intent_analysis.primary_intent.value} (confidence: {intent_analysis.confidence:.2f})
+- Domain: {intent_analysis.domain}
+- Information Already Gathered: {json.dumps(context_summary, indent=2)}
+- Focus Areas: {focus_str}
 
-Generate questions that:
-1. Gather missing information for better personalization
-2. Are natural and conversational
-3. Match the user's intent and domain
-4. Avoid repeating information already gathered
-5. Progress the conversation toward actionable insights
+TASK: Generate {max_questions} engaging follow-up questions that:
+1. Feel natural and conversational (like a knowledgeable friend asking)
+2. Spark curiosity and deeper thinking about the user's needs
+3. Gather missing information crucial for personalized recommendations
+4. Build naturally on what's already been discussed
+5. Show genuine interest in the user's specific situation
+6. Avoid feeling like a form or checklist
 
-Respond with JSON array of questions, each containing:
-- question: the actual question text
+STYLE GUIDELINES:
+- Use conversational language, not formal business speak
+- Ask open-ended questions that invite storytelling
+- Show empathy and understanding of their situation
+- Use "you" and make it personal
+- Vary question length and structure for natural flow
+- Sometimes start with context: "I'm curious..." or "To better understand..."
+
+Generate questions that cover different angles:
+- Practical constraints and preferences
+- Emotional factors and motivations
+- Past experiences and lessons learned
+- Future vision and goals
+- Specific use cases and scenarios
+
+Respond with a JSON array where each question object contains:
+- question: the conversational question text (aim for 15-40 words for natural flow)
 - question_type: one of [open_ended, multiple_choice, scale, boolean, clarification, follow_up]
-- category: information category (budget, timeline, preferences, constraints, etc.)
+- category: information category (budget, timeline, preferences, constraints, experience, goals, etc.)
 - priority: 0.0-1.0 importance score
 - context_relevance: 0.0-1.0 relevance to current context
 - expected_answer_type: text, choice, scale, or boolean
 - follow_up_potential: 0.0-1.0 likelihood to lead to more questions
-- reasoning: why this question is valuable
+- reasoning: why this question adds value to the conversation
 
-Example:
+Example of engaging questions:
 [
   {{
-    "question": "What's your budget range for this purchase?",
+    "question": "What's driving this decision for you right now - is there something specific that sparked your interest?",
     "question_type": "open_ended",
-    "category": "budget",
+    "category": "motivation",
     "priority": 0.9,
     "context_relevance": 0.95,
     "expected_answer_type": "text",
-    "follow_up_potential": 0.7,
-    "reasoning": "Budget is critical for making relevant recommendations"
+    "follow_up_potential": 0.8,
+    "reasoning": "Understanding motivation helps personalize recommendations and shows genuine interest"
   }}
 ]"""
     
@@ -741,29 +780,31 @@ Example:
         
         # Determine question type based on conversation progress and context
         if question_count == 0:
-            # Opening questions
+            # Opening questions - more engaging and conversational
             if any(word in query_lower for word in ['best', 'top', 'recommend']):
-                question_text = "What specific needs should guide my recommendations?"
+                question_text = "I'd love to understand what's most important to you in this decision - what factors should I prioritize?"
             elif any(word in query_lower for word in ['how', 'way', 'method']):
-                question_text = "What's your experience level with this area?"
+                question_text = "What's your background with this - are you starting fresh or building on some experience?"
+            elif any(word in query_lower for word in ['buy', 'purchase', 'get']):
+                question_text = "Tell me about what's driving this purchase - is there a particular situation or need you're addressing?"
             else:
-                question_text = "What outcome are you hoping to achieve?"
+                question_text = "What would success look like for you in this situation?"
         elif question_count < 3:
-            # Early conversation
+            # Early conversation - build rapport and understanding
             fallback_options = [
-                "What constraints or requirements should I consider?",
-                "How will you primarily be using this?",
-                "What's driving this decision right now?",
-                "Are there specific features that matter most to you?"
+                "What constraints or must-haves should I keep in mind while helping you?",
+                "I'm curious about how you plan to use this - can you paint me a picture of a typical scenario?",
+                "What's your timeline looking like, and is there any urgency I should be aware of?",
+                "Are there any past experiences with similar decisions that might inform this one?"
             ]
             question_text = fallback_options[question_count % len(fallback_options)]
         else:
-            # Later conversation
+            # Later conversation - deeper insights
             fallback_options = [
-                "What other factors would help refine my recommendations?",
-                "Are there any deal-breakers I should be aware of?",
-                "What questions do you have about the available options?",
-                "How much flexibility do you have in your approach?"
+                "What other aspects of this decision would be helpful for me to understand?",
+                "Are there any deal-breakers or absolute no-goes I should be aware of?",
+                "What questions are on your mind about the different options available?",
+                "How much flexibility do you have in your approach - are you open to creative solutions?"
             ]
             question_text = fallback_options[question_count % len(fallback_options)]
         

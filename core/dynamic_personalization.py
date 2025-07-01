@@ -37,7 +37,8 @@ class DynamicPersonalizationEngine:
     def __init__(self, 
                  gemini_client: Optional[genai.Client] = None,
                  conversation_history: Optional[ConversationHistory] = None,
-                 model_name: str = "gemini-2.0-flash-001"):
+                 model_name: str = "gemini-2.0-flash-001",
+                 settings: Optional[Any] = None):
         """
         Initialize the Dynamic Personalization Engine.
         
@@ -45,12 +46,13 @@ class DynamicPersonalizationEngine:
             gemini_client: Configured Gemini client for AI operations
             conversation_history: Optional existing conversation history
             model_name: Name of the Gemini model to use for generation
+            settings: Configuration settings for the engine
         """
         self.logger = logging.getLogger(__name__)
         self.model_name = model_name
         
         # Initialize Phase 1 components
-        self.question_generator = AIQuestionGenerator(gemini_client, model_name)
+        self.question_generator = AIQuestionGenerator(gemini_client, model_name, settings)
         self.context_analyzer = ContextAnalyzer()  # ContextAnalyzer doesn't take gemini_client
         self.conversation_history = conversation_history or ConversationHistory()
         
