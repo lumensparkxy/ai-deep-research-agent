@@ -108,7 +108,7 @@ class DynamicPersonalizationEngine:
     
     def generate_next_question(self, conversation_state: ConversationState, additional_context: Optional[str] = None) -> Optional[str]:
         """
-        Generate the next intelligent question based on conversation context using AI.
+        Generate the next intelligent question using pure AI without category constraints.
         
         Args:
             conversation_state: Current state of the conversation
@@ -126,11 +126,11 @@ class DynamicPersonalizationEngine:
             # Get already asked questions to avoid repetition
             asked_questions = [qa.question for qa in conversation_state.question_history]
             
-            # Generate intelligent question using AI without rigid categories
-            question = self._generate_intelligent_ai_question(conversation_state, asked_questions, additional_context)
+            # Generate intelligent question using pure AI - no category constraints
+            question = self._generate_pure_ai_question_unconstrained(conversation_state, asked_questions, additional_context)
             
             if question:
-                self.logger.debug(f"Generated intelligent question: {question[:50]}...")
+                self.logger.debug(f"Generated pure AI question: {question[:50]}...")
                 
                 # Update conversation metadata
                 conversation_state.metadata['last_question_generated'] = datetime.now().isoformat()
@@ -151,7 +151,7 @@ class DynamicPersonalizationEngine:
                             question: str, 
                             response: str) -> Dict[str, Any]:
         """
-        Process user response and update conversation state.
+        Process user response using pure AI analysis without category constraints.
         
         Args:
             conversation_state: Current conversation state
@@ -164,23 +164,22 @@ class DynamicPersonalizationEngine:
         try:
             self.logger.debug(f"Processing response to: {question[:50]}...")
             
-            # Create question-answer pair - let AI determine the category if needed
+            # Create question-answer pair - let AI determine everything naturally
             qa_pair = QuestionAnswer(
                 question=question,
                 answer=response,
                 question_type=QuestionType.OPEN_ENDED,  # Default type
                 timestamp=datetime.now(),
-                category='ai_determined',  # Let AI categorize naturally
+                category='ai_discovered',  # Let AI categorize naturally
                 confidence=0.5,  # Will be updated after analysis
                 importance=0.7,  # Personalization is important
                 context={}
             )
             
-            # Analyze the response using the available ContextAnalyzer method
-            # First, update the conversation state with this new Q&A
+            # Update the conversation state with this new Q&A first
             conversation_state.question_history.append(qa_pair)
             
-            # Now use analyze_context to get full context analysis
+            # Use context analyzer to extract insights
             context_analysis_result = self.context_analyzer.analyze_context(conversation_state)
             
             # Extract response analysis from the context analysis result
@@ -190,26 +189,21 @@ class DynamicPersonalizationEngine:
                 'communication_style': context_analysis_result.communication_style.value,
                 'confidence_score': context_analysis_result.overall_confidence,
                 'extracted_info': self._extract_info_from_priorities(context_analysis_result.priority_insights),
-                'new_topics': self._extract_new_topics_from_analysis(context_analysis_result)
+                'discovered_themes': self._extract_themes_from_analysis(context_analysis_result)
             }
             
-            # Extract personalization information from the analysis
-            extracted_info = self._extract_personalization_info(response, response_analysis)
+            # Extract personalization information using AI-driven analysis
+            extracted_info = self._extract_personalization_info_ai_driven(response, response_analysis, conversation_state)
             
             # Update user profile with new information
             self._update_user_profile(conversation_state, extracted_info)
             
-            # Add to conversation history
-            conversation_state.add_question_answer(
-                question=question,
-                answer=response,
-                category='ai_determined',  # Let AI categorize naturally
-                question_type=QuestionType.OPEN_ENDED,
-                confidence=response_analysis.get('confidence_score', 0.5)
-            )
+            # Update the Q&A pair with better categorization from AI analysis
+            conversation_state.question_history[-1].category = self._determine_natural_category(question, response, extracted_info)
+            conversation_state.question_history[-1].confidence = response_analysis.get('confidence_score', 0.5)
             
-            # Update priority factors based on response analysis
-            self._update_priority_factors(conversation_state, response_analysis)
+            # Update priority factors based on discovered themes
+            self._update_priority_factors_from_themes(conversation_state, response_analysis)
             
             # Store in conversation history
             self.conversation_history.track_question_effectiveness(
@@ -217,7 +211,7 @@ class DynamicPersonalizationEngine:
                 question=question,
                 response=response,
                 question_type=QuestionType.OPEN_ENDED,
-                category='ai_determined'  # Let AI categorize naturally
+                category=conversation_state.question_history[-1].category
             )
             
             # Update the conversation history with the latest state
@@ -376,64 +370,44 @@ class DynamicPersonalizationEngine:
         return context
     
     def _identify_information_gaps(self, conversation_state: ConversationState) -> List[str]:
-        """Identify key information gaps that need to be filled."""
-        # Start with predefined essential categories
-        essential_categories = [
-            'budget', 'preferences', 'timeline', 'constraints', 
-            'context', 'experience_level'
-        ]
+        """Identify key information gaps using AI-driven analysis rather than predefined categories."""
+        # Use AI to analyze what's missing rather than checking predefined buckets
+        gaps = []
         
-        # Get categories we've already covered
-        covered_categories = set(qa.category for qa in conversation_state.question_history)
+        # Analyze conversation flow for natural gaps
+        questions_asked = len(conversation_state.question_history)
+        info_gathered = len(conversation_state.user_profile)
         
-        # Priority 1: Essential categories we haven't covered
-        priority_gaps = [cat for cat in essential_categories if cat not in covered_categories]
-        
-        # Priority 2: Domain-specific categories based on query
-        domain = self._classify_domain(conversation_state.user_query)
-        domain_specific = []
-        
-        if domain == 'technology':
-            tech_categories = ['performance_requirements', 'brand_preferences', 'technical_requirements']
-            if 'smartphone' in conversation_state.user_query.lower() or 'phone' in conversation_state.user_query.lower():
-                tech_categories.extend(['camera_needs', 'storage_needs', 'size_preferences'])
-            elif 'laptop' in conversation_state.user_query.lower() or 'computer' in conversation_state.user_query.lower():
-                tech_categories.extend(['usage_type', 'portability_needs', 'software_requirements'])
+        # If we have very little information, focus on core decision factors
+        if info_gathered < 3:
+            gaps = [
+                'core_priorities',
+                'key_requirements', 
+                'practical_constraints',
+                'decision_criteria'
+            ]
+        else:
+            # Analyze existing information to find natural gaps
+            profile_themes = list(conversation_state.user_profile.keys())
             
-            domain_specific = [cat for cat in tech_categories if cat not in covered_categories]
+            # Common decision-making areas that might be missing
+            potential_areas = [
+                'budget_considerations',
+                'timeline_factors', 
+                'usage_scenarios',
+                'quality_expectations',
+                'deal_breakers',
+                'success_criteria'
+            ]
+            
+            # Find areas not yet covered based on actual conversation themes
+            for area in potential_areas:
+                area_covered = any(theme in area or area in theme for theme in profile_themes)
+                if not area_covered:
+                    gaps.append(area)
         
-        elif domain == 'health':
-            health_categories = ['health_status', 'fitness_goals', 'dietary_restrictions']
-            domain_specific = [cat for cat in health_categories if cat not in covered_categories]
-        
-        elif domain == 'travel':
-            travel_categories = ['travel_style', 'accommodation_preferences', 'activity_preferences']
-            domain_specific = [cat for cat in travel_categories if cat not in covered_categories]
-        
-        # Priority 3: Follow-up categories for deeper insights
-        follow_up_categories = []
-        user_profile = conversation_state.user_profile
-        
-        if 'budget' in user_profile and 'budget_flexibility' not in covered_categories:
-            follow_up_categories.append('budget_flexibility')
-        if 'preferences' in user_profile and 'preference_priorities' not in covered_categories:
-            follow_up_categories.append('preference_priorities')
-        if 'timeline' in user_profile and 'urgency_factors' not in covered_categories:
-            follow_up_categories.append('urgency_factors')
-        
-        # Combine all gaps with priority ordering
-        all_gaps = priority_gaps + domain_specific + follow_up_categories
-        
-        # Remove duplicates while preserving order
-        unique_gaps = []
-        seen = set()
-        for gap in all_gaps:
-            if gap not in seen:
-                unique_gaps.append(gap)
-                seen.add(gap)
-        
-        self.logger.debug(f"Identified information gaps: {unique_gaps[:7]}")
-        return unique_gaps[:7]  # Return top 7 gaps
+        self.logger.debug(f"Identified natural information gaps: {gaps[:5]}")
+        return gaps[:5]  # Return top 5 gaps
     
     def _extract_focus_areas(self, initial_context: Dict[str, Any]) -> List[str]:
         """Extract focus areas from initial context analysis."""
@@ -664,18 +638,7 @@ class DynamicPersonalizationEngine:
         
         return list(set(new_topics))  # Remove duplicates
     
-    def _classify_domain(self, query: str) -> str:
-        """Simple domain classification for basic context."""
-        query_lower = query.lower()
-        
-        if any(word in query_lower for word in ['smartphone', 'phone', 'laptop', 'computer', 'tech']):
-            return 'technology'
-        elif any(word in query_lower for word in ['travel', 'trip', 'vacation']):
-            return 'travel'
-        elif any(word in query_lower for word in ['health', 'medical', 'doctor']):
-            return 'health'
-        else:
-            return 'general'
+
     
     def _get_follow_up_categories(self, conversation_state: ConversationState) -> List[str]:
         """Get follow-up categories for deeper conversation."""
@@ -719,21 +682,360 @@ class DynamicPersonalizationEngine:
         
         return available[0] if available else 'general_feedback'
     
-    def _generate_intelligent_ai_question(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
-        """Generate an intelligent question using pure AI without rigid categories."""
+    def _generate_pure_ai_question_unconstrained(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
+        """
+        Use pure AI to generate the next intelligent question without any category or template constraints.
+        Let the AI naturally discover what to ask based on conversation flow and user context.
+        """
         try:
-            # Check if Gemini client is available and functional
+            # Check if Gemini client is available
             if not self.question_generator.gemini_client:
-                self.logger.info("Gemini client not available, using fallback questions")
-                return self._generate_simple_fallback_question(conversation_state, asked_questions)
+                self.logger.info("Gemini client not available, using simple fallback")
+                return self._generate_contextual_fallback_question(conversation_state, asked_questions)
             
-            # Try to use Gemini AI for intelligent question generation
-            self.logger.debug("Attempting AI question generation...")
-            return self._generate_pure_ai_question(conversation_state, asked_questions, additional_context)
-                
+            # Create pure AI prompt that encourages natural discovery
+            prompt = self._create_pure_ai_discovery_prompt(conversation_state, asked_questions, additional_context)
+            
+            # Generate question with improved error handling
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    start_time = time.time()
+                    
+                    response = self.question_generator.gemini_client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt
+                    )
+                    
+                    response_time = time.time() - start_time
+                    
+                    if response and response.text:
+                        generated_question = self._extract_question_from_response(response.text)
+                        
+                        if generated_question:
+                            # Check for natural progression (not just word similarity)
+                            if not self._conflicts_with_conversation_flow(generated_question, conversation_state, asked_questions):
+                                self.logger.debug(f"Pure AI generated question in {response_time:.2f}s: {generated_question[:50]}...")
+                                return generated_question
+                            else:
+                                self.logger.debug(f"Question conflicts with conversation flow (attempt {attempt + 1})")
+                        else:
+                            self.logger.warning(f"Could not extract valid question from AI response (attempt {attempt + 1})")
+                    
+                    # If this was the last attempt, use fallback
+                    if attempt == max_retries - 1:
+                        self.logger.info("All AI attempts failed, using contextual fallback")
+                        return self._generate_contextual_fallback_question(conversation_state, asked_questions)
+                        
+                except Exception as e:
+                    self.logger.warning(f"AI attempt {attempt + 1} failed: {str(e)[:100]}...")
+                    if attempt == max_retries - 1:
+                        return self._generate_contextual_fallback_question(conversation_state, asked_questions)
+                    time.sleep(min(2 ** attempt, 3))  # Progressive backoff
+            
         except Exception as e:
-            self.logger.warning(f"AI question generation failed with error: {str(e)[:200]}..., using fallback")
-            return self._generate_simple_fallback_question(conversation_state, asked_questions)
+            self.logger.error(f"Error in pure AI question generation: {str(e)[:100]}...")
+            
+        return None
+    
+    def _create_pure_ai_discovery_prompt(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> str:
+        """Create a pure AI discovery prompt that encourages natural question generation."""
+        questions_count = len(conversation_state.question_history)
+        
+        # Build natural conversation context
+        conversation_flow = []
+        if conversation_state.question_history:
+            # Show last 2-3 exchanges for context
+            recent_exchanges = conversation_state.question_history[-3:]
+            for qa in recent_exchanges:
+                conversation_flow.append(f"You: {qa.question}")
+                conversation_flow.append(f"Them: {qa.answer}")
+        
+        # Extract what we've learned naturally
+        insights_discovered = []
+        if conversation_state.user_profile:
+            for key, value in list(conversation_state.user_profile.items())[:4]:
+                insights_discovered.append(f"• {key.replace('_', ' ')}: {str(value)[:60]}...")
+        
+        # Create natural, discovery-focused prompt
+        if questions_count == 0:
+            # First question - focus on natural opening
+            prompt = f"""You are having a friendly conversation with someone who wants personalized advice about: "{conversation_state.user_query}"
+
+This is your first question to them. Think like a helpful friend who genuinely wants to understand their situation to give the best possible advice.
+
+GOAL: Ask ONE natural question that opens the conversation and helps you understand what matters most to them.
+
+GUIDELINES:
+• Be warm and conversational 
+• Focus on understanding their real-world needs
+• Don't use formal categories or templates
+• Ask what you would genuinely want to know to help them
+• 10-25 words, natural tone
+• End with a question mark
+
+Think: "What would I ask a friend to really understand their situation and give great advice?"
+
+Generate ONE natural opening question:"""
+
+        elif questions_count <= 2:
+            # Early conversation - build on what they've shared
+            prompt = f"""You're having a helpful conversation about: "{conversation_state.user_query}"
+
+CONVERSATION SO FAR:
+{chr(10).join(conversation_flow)}
+
+INSIGHTS YOU'VE GATHERED:
+{chr(10).join(insights_discovered) if insights_discovered else "Just getting to know them"}
+
+GOAL: Ask ONE thoughtful follow-up question that builds naturally on what they've shared.
+
+APPROACH:
+• Show you're listening to what they've said
+• Dig deeper into something they mentioned
+• Or explore a related aspect that would help you advise them
+• Be genuinely curious about their specific situation
+• Avoid repeating what you already know
+
+Think: "Based on what they just told me, what would help me give them better advice?"
+
+Generate ONE natural follow-up question (10-25 words):"""
+
+        else:
+            # Deeper conversation - focus on gaps and decision-making factors
+            prompt = f"""You're in a helpful conversation about: "{conversation_state.user_query}"
+
+RECENT EXCHANGE:
+{chr(10).join(conversation_flow[-4:]) if conversation_flow else "No recent exchanges"}
+
+WHAT YOU'VE LEARNED:
+{chr(10).join(insights_discovered) if insights_discovered else "Limited insights gathered"}
+
+CONVERSATION STAGE: You've asked {questions_count} questions. Focus on what would be most valuable for making a great recommendation.
+
+GOAL: Ask ONE strategic question that fills an important gap in your understanding.
+
+FOCUS AREAS TO CONSIDER:
+• Deal-breakers or absolute requirements
+• Real-world usage scenarios  
+• Decision-making priorities
+• Concerns or hesitations
+• Success criteria
+• Practical constraints
+
+Think: "What key piece of information would help me give them the most valuable advice?"
+
+Generate ONE focused question (10-25 words):"""
+
+        return prompt
+    
+    def _generate_contextual_fallback_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
+        """Generate a contextual fallback question when AI is unavailable."""
+        questions_count = len(conversation_state.question_history)
+        query_words = conversation_state.user_query.lower().split()
+        
+        # Progressive question strategy based on conversation stage
+        if questions_count == 0:
+            # Opening questions - focus on what matters most
+            opening_questions = [
+                f"What's most important to you when choosing {self._extract_main_subject(conversation_state.user_query)}?",
+                f"What would make your {self._extract_main_subject(conversation_state.user_query)} decision feel like a real win?",
+                f"What specific needs are driving your search for {self._extract_main_subject(conversation_state.user_query)}?",
+                "What's the main challenge you're hoping this will solve for you?",
+                "Tell me what success would look like for you in this decision."
+            ]
+            
+            for question in opening_questions:
+                if not self._is_similar_question_simple(question, asked_questions):
+                    return question
+        
+        elif questions_count <= 2:
+            # Early follow-up questions - build on conversation
+            if conversation_state.question_history:
+                last_response = conversation_state.question_history[-1].answer.lower()
+                
+                # Generate contextual follow-ups based on their last response
+                follow_up_questions = [
+                    "That's helpful! What other factors are important in your decision?",
+                    "I see. Are there any specific requirements or constraints I should know about?",
+                    "Got it. What would be an absolute deal-breaker for you?",
+                    "Thanks for sharing that. How do you typically make decisions like this?",
+                    "That makes sense. What's your timeline looking like for this decision?"
+                ]
+                
+                for question in follow_up_questions:
+                    if not self._is_similar_question_simple(question, asked_questions):
+                        return question
+        
+        else:
+            # Deeper questions - focus on decision-making factors
+            deeper_questions = [
+                "What would give you the most confidence in your final choice?",
+                "Are there any concerns or hesitations you have about the options?",
+                "How will you know you've made the right decision?",
+                "What would make you feel completely satisfied with your choice?",
+                "Is there anything else that would be valuable for me to understand?"
+            ]
+            
+            for question in deeper_questions:
+                if not self._is_similar_question_simple(question, asked_questions):
+                    return question
+        
+        # Final fallback
+        return "What else would be helpful for me to know to give you the best possible advice?"
+    
+    def _conflicts_with_conversation_flow(self, question: str, conversation_state: ConversationState, asked_questions: List[str]) -> bool:
+        """Check if question conflicts with natural conversation flow."""
+        # Simple similarity check
+        return self._is_similar_question_simple(question, asked_questions)
+    
+    def _is_similar_question_simple(self, new_question: str, asked_questions: List[str]) -> bool:
+        """Simple similarity check for fallback scenarios."""
+        if not asked_questions:
+            return False
+        
+        new_words = set(new_question.lower().split())
+        
+        for asked in asked_questions:
+            asked_words = set(asked.lower().split())
+            
+            # Remove common words
+            meaningful_new = new_words - {'what', 'is', 'the', 'do', 'you', 'how', 'are', 'for', 'to', 'a', 'an', 'your', 'would', 'could', 'should'}
+            meaningful_asked = asked_words - {'what', 'is', 'the', 'do', 'you', 'how', 'are', 'for', 'to', 'a', 'an', 'your', 'would', 'could', 'should'}
+            
+            if meaningful_new and meaningful_asked:
+                overlap = meaningful_new.intersection(meaningful_asked)
+                overlap_ratio = len(overlap) / max(len(meaningful_new), len(meaningful_asked))
+                
+                if overlap_ratio > 0.6:  # 60% meaningful word overlap
+                    return True
+        
+        return False
+    
+    def _extract_main_subject(self, query: str) -> str:
+        """Extract the main subject from the query for natural conversation."""
+        query_lower = query.lower()
+        
+        # Common patterns
+        if 'smartphone' in query_lower or 'phone' in query_lower:
+            return 'smartphone'
+        elif 'laptop' in query_lower:
+            return 'laptop'
+        elif 'camera' in query_lower:
+            return 'camera'
+        elif 'car' in query_lower or 'vehicle' in query_lower:
+            return 'vehicle'
+        elif 'software' in query_lower or 'app' in query_lower:
+            return 'software'
+        elif 'service' in query_lower:
+            return 'service'
+        elif 'course' in query_lower or 'education' in query_lower:
+            return 'learning option'
+        else:
+            # Extract the first noun-like word
+            words = query.split()
+            for word in words:
+                if len(word) > 3 and word.lower() not in ['best', 'good', 'find', 'help', 'need', 'want', 'should']:
+                    return word.lower()
+            return 'choice'
+    
+    def _extract_personalization_info_ai_driven(self, response: str, analysis: Dict[str, Any], conversation_state: ConversationState) -> Dict[str, Any]:
+        """Extract personalization information using AI-driven analysis without categories."""
+        extracted = {}
+        
+        # Extract from AI analysis
+        if 'extracted_info' in analysis:
+            extracted.update(analysis['extracted_info'])
+        
+        # Extract discovered themes naturally
+        if 'discovered_themes' in analysis:
+            for theme in analysis['discovered_themes']:
+                if isinstance(theme, str) and theme not in extracted:
+                    extracted[theme] = response[:100] + "..." if len(response) > 100 else response
+        
+        # Natural language processing for common patterns
+        response_lower = response.lower()
+        
+        # Budget patterns
+        if any(word in response_lower for word in ['$', 'dollar', 'cost', 'price', 'budget', 'afford', 'spend']):
+            extracted['budget_consideration'] = response
+        
+        # Timeline patterns  
+        if any(word in response_lower for word in ['soon', 'quickly', 'asap', 'urgent', 'month', 'week', 'year', 'timeline']):
+            extracted['timeline_preference'] = response
+        
+        # Quality patterns
+        if any(word in response_lower for word in ['quality', 'best', 'premium', 'high-end', 'professional', 'reliable']):
+            extracted['quality_priority'] = response
+        
+        # Convenience patterns
+        if any(word in response_lower for word in ['easy', 'simple', 'convenient', 'user-friendly', 'straightforward']):
+            extracted['convenience_preference'] = response
+        
+        # Experience patterns
+        if any(word in response_lower for word in ['beginner', 'expert', 'experienced', 'new to', 'familiar', 'advanced']):
+            extracted['experience_level'] = response
+        
+        # Add response metadata
+        extracted['response_length'] = len(response.split())
+        extracted['analysis_timestamp'] = datetime.now().isoformat()
+        
+        return extracted
+    
+    def _determine_natural_category(self, question: str, response: str, extracted_info: Dict[str, Any]) -> str:
+        """Determine category naturally based on content, not predefined buckets."""
+        # Let the AI naturally categorize based on what was actually discussed
+        question_lower = question.lower()
+        response_lower = response.lower()
+        
+        # Natural categorization based on actual content
+        if any(word in question_lower + response_lower for word in ['budget', 'cost', 'price', 'afford', '$']):
+            return 'budget_discussion'
+        elif any(word in question_lower + response_lower for word in ['time', 'when', 'soon', 'urgency', 'deadline']):
+            return 'timing_discussion'
+        elif any(word in question_lower + response_lower for word in ['quality', 'performance', 'feature', 'capability']):
+            return 'quality_discussion'
+        elif any(word in question_lower + response_lower for word in ['use', 'purpose', 'need', 'requirement']):
+            return 'usage_discussion'
+        elif any(word in question_lower + response_lower for word in ['experience', 'familiar', 'level', 'knowledge']):
+            return 'experience_discussion'
+        elif any(word in question_lower + response_lower for word in ['important', 'priority', 'matter', 'crucial']):
+            return 'priority_discussion'
+        else:
+            return 'open_discussion'
+    
+    def _extract_themes_from_analysis(self, analysis_result) -> List[str]:
+        """Extract themes from context analysis without category constraints."""
+        themes = []
+        
+        # Extract from priority insights
+        for priority in analysis_result.priority_insights:
+            if hasattr(priority, 'category') and priority.category not in themes:
+                themes.append(priority.category)
+        
+        # Extract from pattern insights
+        for pattern in analysis_result.pattern_insights:
+            if hasattr(pattern, 'theme') and pattern.theme not in themes:
+                themes.append(pattern.theme)
+            elif hasattr(pattern, 'category') and pattern.category not in themes:
+                themes.append(pattern.category)
+        
+        return themes[:5]  # Limit to top 5 themes
+    
+    def _update_priority_factors_from_themes(self, conversation_state: ConversationState, analysis: Dict[str, Any]):
+        """Update priority factors based on discovered themes rather than predefined categories."""
+        if 'discovered_themes' in analysis:
+            for theme in analysis['discovered_themes']:
+                if theme not in conversation_state.priority_factors:
+                    conversation_state.priority_factors[theme] = 0.6  # New themes get moderate priority
+        
+        # Update confidence scores for discovered themes
+        if 'confidence_score' in analysis:
+            for theme in conversation_state.priority_factors.keys():
+                if theme in conversation_state.confidence_scores:
+                    conversation_state.confidence_scores[theme] = analysis['confidence_score']
+                else:
+                    conversation_state.confidence_scores[theme] = analysis['confidence_score']
     
     def _generate_pure_ai_question(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
         """Use Gemini AI to generate the next intelligent question without category constraints."""

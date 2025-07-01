@@ -417,15 +417,8 @@ class Settings:
     def confidence_decimal_places(self) -> int:
         return self.config.get("ui", {}).get("confidence_decimal_places", 1)
     
-    # Personalization Settings
-    @property
-    def personalization_categories(self) -> Dict[str, List[str]]:
-        return self.config.get("personalization", {}).get("categories", {})
-    
-    def get_category_questions(self, category: str) -> List[str]:
-        """Get personalization questions for a specific category."""
-        return self.personalization_categories.get(category.lower(), 
-                                                 self.personalization_categories.get("other", []))
+    # Note: Pure AI-driven personalization - no hardcoded categories
+    # The system now uses intelligent conversation discovery
     
     # Dynamic Personalization Settings
     @property
@@ -526,14 +519,7 @@ class Settings:
             ai_prompt_modifier=mode_config.get("ai_prompt_modifier", "Generate thoughtful questions covering key decision aspects.")
         )
     
-    def get_fallback_questions(self, category: str) -> List[str]:
-        """Get fallback questions for a specific category."""
-        fallback_config = self.config.get("ai_question_generation", {}).get("fallback_questions", {})
-        return fallback_config.get(category.lower(), fallback_config.get("other", [
-            "What's most important to you?",
-            "Any constraints?",
-            "Timeline for decision?"
-        ]))
+
     
     @property
     def available_conversation_modes(self) -> List[str]:

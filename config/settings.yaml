@@ -92,13 +92,8 @@ ui:
   separator_width: 80
   confidence_decimal_places: 1
 
-personalization:
-  categories:
-    health: ["age", "weight", "fitness_level", "health_conditions", "goals"]
-    finance: ["income_range", "risk_tolerance", "timeline", "goals", "current_assets"]
-    technology: ["experience_level", "budget", "use_case", "platform_preference"]
-    lifestyle: ["location", "budget", "preferences", "constraints", "timeline"]
-    other: ["relevant_context", "constraints", "preferences", "timeline"]
+    # Note: Removed hardcoded personalization categories to enable pure AI-driven question generation
+    # The system now uses intelligent AI analysis to discover relevant aspects naturally
 
 # Dynamic Personalization Configuration
 dynamic_personalization:
@@ -154,13 +149,8 @@ ai_question_generation:
   duplicate_detection: true
   relevance_threshold: 0.6
   
-  # Fallback Behavior
-  fallback_questions:
-    technology: ["What's your experience level?", "What's your budget range?", "What will you primarily use it for?"]
-    health: ["Any specific health concerns?", "Are you consulting with professionals?", "What are your main goals?"]
-    finance: ["What's your risk tolerance?", "What's your investment timeline?", "What's your budget range?"]
-    lifestyle: ["What's your budget?", "Any specific preferences?", "Timeline for decision?"]
-    other: ["What's most important to you?", "Any constraints?", "Timeline for decision?"]
+  # Pure AI-driven question generation - no fallback templates needed
+  # The system uses intelligent conversation flow to discover what to ask
 
 # Context Analysis Configuration
 context_analysis:

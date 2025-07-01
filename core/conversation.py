@@ -233,7 +233,7 @@ class ConversationHandler:
     
     def _gather_personalization(self, query: str, temp_session_id: str = None) -> Dict[str, Any]:
         """
-        Gather personalization information using dynamic AI-driven conversation with intelligent mode selection.
+        Gather personalization information using pure AI-driven conversation.
         
         Args:
             query: User's research query
@@ -243,11 +243,11 @@ class ConversationHandler:
             Dictionary of personalization data
         """
         if not self.personalization_engine or not self.mode_intelligence:
-            # Fallback to static questions if AI engines not available
-            return self._gather_static_personalization(query)
+            # Simple fallback if AI engines not available
+            return self._gather_simple_personalization(query)
         
         print("\n🤖 Let me ask you some intelligent questions to personalize your research:")
-        print("   I'll adapt my questions based on your responses for better recommendations.")
+        print("   I'll use AI to discover what matters most for your specific situation.")
         print()
         
         try:
@@ -259,7 +259,7 @@ class ConversationHandler:
             print(f"   {mode_recommendation.reasoning}")
             print()
             
-            # Initialize dynamic conversation with mode intelligence
+            # Initialize pure AI conversation - no categories
             session_id = temp_session_id or f"personalization_{int(datetime.now().timestamp() * 1000)}"
             conversation_state = self.personalization_engine.initialize_conversation(query, session_id)
             self.current_conversation_state = conversation_state
@@ -277,23 +277,11 @@ class ConversationHandler:
             response_times = []
             question_count = 0
             
-            print(f"📋 I'll ask up to {max_questions} questions to understand your needs:")
+            print(f"📋 I'll intelligently explore your needs (up to {max_questions} questions):")
             
             while question_count < max_questions:
-                # Generate next intelligent question with mode-specific prompting
-                mode_context = {
-                    'user_query': query,
-                    'context_type': user_signals.context_type,
-                    'current_mode': current_mode.value
-                }
-                
-                # Apply mode-specific prompt
-                mode_prompt = self.mode_intelligence.create_mode_specific_prompt(current_mode, mode_context)
-                
-                question = self.personalization_engine.generate_next_question(
-                    conversation_state, 
-                    additional_context=mode_prompt
-                )
+                # Generate next intelligent question using pure AI - no categories
+                question = self.personalization_engine.generate_next_question(conversation_state)
                 
                 if not question:
                     print("✅ I have enough information to provide personalized recommendations!")
@@ -317,7 +305,7 @@ class ConversationHandler:
                     user_responses.append(response)
                     response_times.append(response_time)
                     
-                    # Process the response
+                    # Process the response using pure AI analysis
                     result = self.personalization_engine.process_user_response(
                         conversation_state, question, response
                     )
@@ -377,9 +365,9 @@ class ConversationHandler:
             return extracted_context
             
         except Exception as e:
-            self.logger.error(f"Error in dynamic personalization with mode intelligence: {e}")
-            print("🔄 Falling back to standard questions...")
-            return self._gather_static_personalization(query)
+            self.logger.error(f"Error in pure AI personalization: {e}")
+            print("🔄 Using simple fallback approach...")
+            return self._gather_simple_personalization(query)
     
     def _convert_conversation_to_context(self, conversation_state, summary: Dict[str, Any]) -> Dict[str, Any]:
         """Convert conversation state to expected context format."""
@@ -418,9 +406,9 @@ class ConversationHandler:
         
         return context
     
-    def _gather_static_personalization(self, query: str) -> Dict[str, Any]:
+    def _gather_simple_personalization(self, query: str) -> Dict[str, Any]:
         """
-        Fallback method for static personalization questions.
+        Simple fallback for personalization when AI engines not available.
         
         Args:
             query: User's research query
@@ -432,77 +420,46 @@ class ConversationHandler:
         print("   (You can skip any question by pressing Enter)")
         print()
         
-        # Classify query to determine relevant questions
-        category = self._classify_query(query)
-        questions = self.settings.get_category_questions(category)
+        context = {"personalize": True}
+        
+        # Use simple, general questions without rigid categories
+        general_questions = [
+            "What's most important to you in this decision?",
+            "Are there any specific requirements or constraints?",
+            "What's your timeline for making this decision?",
+            "What would make this choice feel like a real win for you?",
+            "Are there any deal-breakers or things to avoid?"
+        ]
         
         user_info = {}
-        constraints = {}
-        preferences = {}
-        
-        # Ask category-specific questions
-        for question in questions:
-            response = self._ask_personalization_question(question)
-            if response:
-                # Categorize the response
-                if question.lower() in ['age', 'weight', 'height', 'income', 'budget']:
-                    user_info[question] = response
-                elif question.lower() in ['timeline', 'location', 'constraints']:
-                    constraints[question] = response
+        for i, question in enumerate(general_questions, 1):
+            try:
+                response = input(f"❓ Question {i}: {question}\n➤ ").strip()
+                if response:
+                    # Store response with descriptive key based on question type
+                    if "important" in question.lower():
+                        user_info['priorities'] = response
+                    elif "requirements" in question.lower() or "constraints" in question.lower():
+                        user_info['constraints'] = response
+                    elif "timeline" in question.lower():
+                        user_info['timeline'] = response
+                    elif "win" in question.lower():
+                        user_info['success_criteria'] = response
+                    elif "deal-breaker" in question.lower() or "avoid" in question.lower():
+                        user_info['deal_breakers'] = response
+                    else:
+                        user_info[f'response_{i}'] = response
                 else:
-                    preferences[question] = response
+                    print("   (Skipped)")
+            except (KeyboardInterrupt, EOFError):
+                break
         
-        # Ask general constraint questions
-        budget = self._ask_optional("Budget range (if applicable)")
-        if budget:
-            constraints['budget'] = budget
-        
-        timeline = self._ask_optional("Timeline for decision")
-        if timeline:
-            constraints['timeline'] = timeline
-        
-        location = self._ask_optional("Location (if relevant)")
-        if location:
-            constraints['location'] = location
-        
-        context = {}
         if user_info:
             context['user_info'] = user_info
-        if constraints:
-            context['constraints'] = constraints
-        if preferences:
-            context['preferences'] = preferences
         
         return context
     
-    def _classify_query(self, query: str) -> str:
-        """
-        Classify query into category for personalization.
-        
-        Args:
-            query: User's research query
-            
-        Returns:
-            Category string
-        """
-        # Simple keyword-based classification
-        query_lower = query.lower()
-        
-        health_keywords = ['health', 'exercise', 'diet', 'fitness', 'medical', 'workout', 'nutrition']
-        finance_keywords = ['money', 'investment', 'budget', 'loan', 'credit', 'insurance', 'financial']
-        tech_keywords = ['software', 'app', 'computer', 'phone', 'technology', 'digital', 'online', 'smartphone', 'laptop', 'marketing']
-        lifestyle_keywords = ['travel', 'food', 'restaurant', 'hobby', 'entertainment', 'shopping', 'destinations', 'hobbies', 'services']
-        
-        if any(keyword in query_lower for keyword in health_keywords):
-            return 'health'
-        elif any(keyword in query_lower for keyword in finance_keywords):
-            return 'finance'
-        elif any(keyword in query_lower for keyword in tech_keywords):
-            return 'technology'
-        elif any(keyword in query_lower for keyword in lifestyle_keywords):
-            return 'lifestyle'
-        else:
-            return 'other'
+
     
     def _ask_personalization_question(self, question: str) -> Optional[str]:
         """Ask a specific personalization question."""
