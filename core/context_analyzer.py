@@ -637,57 +637,93 @@ class ContextAnalyzer:
     
     def _identify_contextual_gaps(self, conversation_state: ConversationState, 
                                 priorities: List[PriorityInsight]) -> List[ContextualGap]:
-        """Identify contextual information gaps."""
+        """Identify contextual information gaps dynamically based on conversation analysis."""
         gaps = []
         user_profile = conversation_state.user_profile
         user_query = conversation_state.user_query.lower()
         
-        # Budget gap
-        budget_priority = next((p for p in priorities if p.category == 'budget'), None)
-        if budget_priority and budget_priority.importance in [PriorityLevel.CRITICAL, PriorityLevel.HIGH]:
-            if 'budget' not in user_profile and 'cost' not in user_profile:
+        # Dynamic gap identification based on priority patterns
+        high_priority_categories = [p.category for p in priorities 
+                                  if p.importance in [PriorityLevel.CRITICAL, PriorityLevel.HIGH]]
+        
+        # Financial information gap - if budget/cost appears important but unspecified
+        if any('budget' in cat or 'cost' in cat or 'financial' in cat for cat in high_priority_categories):
+            if not any(key for key in user_profile.keys() 
+                      if any(word in key.lower() for word in ['budget', 'cost', 'price', 'money'])):
                 gaps.append(ContextualGap(
-                    category='budget_specifics',
+                    category='financial_constraints_and_budget_parameters',
                     priority=PriorityLevel.HIGH,
                     confidence=AnalysisConfidence.HIGH,
-                    impact_on_research='Critical for filtering recommendations by price range',
-                    suggested_approach='Ask for specific budget range or constraints',
-                    related_patterns=['budget_priority_detected']
+                    impact_on_research='Essential for filtering options within financial constraints',
+                    suggested_approach='Determine specific budget range and cost considerations',
+                    related_patterns=['financial_priority_detected']
                 ))
         
-        # Expertise level gap
-        if 'expertise' not in user_profile and 'experience' not in user_profile:
-            if any(word in user_query for word in ['learn', 'new', 'beginner', 'expert']):
+        # Experience/expertise gap - if learning or complexity indicators present
+        learning_indicators = ['learn', 'new', 'beginner', 'understand', 'explain', 'guide']
+        if any(word in user_query for word in learning_indicators):
+            if not any(key for key in user_profile.keys() 
+                      if any(word in key.lower() for word in ['experience', 'expertise', 'background', 'skill'])):
                 gaps.append(ContextualGap(
-                    category='expertise_level',
+                    category='experience_level_and_technical_background',
                     priority=PriorityLevel.MEDIUM,
                     confidence=AnalysisConfidence.MEDIUM,
-                    impact_on_research='Determines appropriate recommendation complexity',
-                    suggested_approach='Assess experience level with domain-specific questions',
+                    impact_on_research='Determines appropriate complexity and explanation level',
+                    suggested_approach='Assess current knowledge and experience with domain',
                     related_patterns=['learning_context_detected']
                 ))
         
-        # Context specificity gap
-        if 'context' not in user_profile and 'use_case' not in user_profile:
+        # Usage context gap - if purpose/application unclear
+        if not any(key for key in user_profile.keys() 
+                  if any(word in key.lower() for word in ['context', 'use', 'purpose', 'application', 'scenario'])):
             gaps.append(ContextualGap(
-                category='usage_context',
+                category='usage_context_and_application_scenario',
                 priority=PriorityLevel.MEDIUM,
                 confidence=AnalysisConfidence.MEDIUM,
-                impact_on_research='Ensures recommendations fit actual use case',
-                suggested_approach='Clarify intended use, environment, or application',
+                impact_on_research='Ensures recommendations match actual intended use',
+                suggested_approach='Clarify specific use case, environment, and application',
                 related_patterns=['context_clarification_needed']
             ))
         
-        # Stakeholder consideration gap
-        if len(conversation_state.question_history) > 2:  # Later in conversation
-            if not any(word in str(user_profile) for word in ['family', 'team', 'others', 'colleagues']):
+        # Timeline/urgency gap - if time-sensitive language detected
+        urgency_indicators = ['urgent', 'asap', 'quick', 'fast', 'deadline', 'soon', 'timeline']
+        if any(word in user_query for word in urgency_indicators):
+            if not any(key for key in user_profile.keys() 
+                      if any(word in key.lower() for word in ['timeline', 'deadline', 'urgency', 'time'])):
                 gaps.append(ContextualGap(
-                    category='stakeholder_considerations',
+                    category='timeline_and_urgency_requirements',
+                    priority=PriorityLevel.HIGH,
+                    confidence=AnalysisConfidence.HIGH,
+                    impact_on_research='Affects prioritization and recommendation timeframes',
+                    suggested_approach='Determine specific timeline constraints and urgency levels',
+                    related_patterns=['time_pressure_detected']
+                ))
+        
+        # Decision criteria gap - if comparison/choice language present but criteria unclear
+        choice_indicators = ['best', 'better', 'compare', 'choose', 'decide', 'options']
+        if any(word in user_query for word in choice_indicators):
+            if not any(key for key in user_profile.keys() 
+                      if any(word in key.lower() for word in ['criteria', 'important', 'priority', 'factors'])):
+                gaps.append(ContextualGap(
+                    category='decision_criteria_and_selection_factors',
+                    priority=PriorityLevel.MEDIUM,
+                    confidence=AnalysisConfidence.MEDIUM,
+                    impact_on_research='Guides comparative analysis and recommendation ranking',
+                    suggested_approach='Identify key factors and criteria for decision making',
+                    related_patterns=['decision_complexity_indicators']
+                ))
+        
+        # Stakeholder consideration gap - for complex decisions
+        if len(conversation_state.question_history) > 2:  # Later in conversation
+            if not any(key for key in user_profile.keys() 
+                      if any(word in key.lower() for word in ['team', 'family', 'others', 'stakeholder', 'colleague'])):
+                gaps.append(ContextualGap(
+                    category='stakeholder_involvement_and_impact',
                     priority=PriorityLevel.LOW,
                     confidence=AnalysisConfidence.LOW,
-                    impact_on_research='May affect decision criteria and preferences',
-                    suggested_approach='Ask about others who might be involved or affected',
-                    related_patterns=['decision_complexity_indicators']
+                    impact_on_research='May reveal additional requirements or constraints',
+                    suggested_approach='Consider if others are involved or affected by decision',
+                    related_patterns=['multi_stakeholder_indicators']
                 ))
         
         return gaps

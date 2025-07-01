@@ -269,36 +269,94 @@ class CompletionAssessment:
         return adjusted_confidence
     
     def _identify_missing_categories(self, user_query: str, gathered_info: Dict[str, Any]) -> List[str]:
-        """Identify missing information categories based on query analysis."""
-        # Analyze query to determine what categories are relevant
-        query_lower = user_query.lower()
+        """Identify missing information areas using AI analysis instead of predefined categories."""
+        try:
+            # Create AI prompt for dynamic category discovery
+            prompt = f"""Analyze this research conversation and identify what key information areas are missing.
+
+USER'S ORIGINAL QUERY: {user_query}
+
+INFORMATION ALREADY GATHERED:
+{json.dumps(gathered_info, indent=2) if gathered_info else "No information gathered yet"}
+
+Based on the user's query, identify what areas of information are missing that would be crucial for providing excellent research. Think about:
+- What context about their situation is missing?
+- What practical constraints haven't been explored? 
+- What preferences or requirements are unclear?
+- What success criteria or goals need clarification?
+
+Return only a JSON array of missing information area names (as strings), focusing on what would genuinely improve research quality for THIS specific query.
+
+Example format: ["budget_constraints", "usage_context", "experience_level", "decision_timeline"]
+
+Avoid generic categories - be specific to what this user actually needs based on their query."""
+
+            response = self.research_engine.gemini_client._make_request(prompt)
+            
+            # Parse the response
+            if response and '[' in response and ']' in response:
+                start = response.find('[')
+                end = response.rfind(']') + 1
+                json_text = response[start:end]
+                
+                try:
+                    missing_areas = json.loads(json_text)
+                    # Validate that we got a list of strings
+                    if isinstance(missing_areas, list) and all(isinstance(item, str) for item in missing_areas):
+                        self.logger.debug(f"AI identified missing areas: {missing_areas}")
+                        return missing_areas[:6]  # Limit to 6 areas
+                except json.JSONDecodeError:
+                    pass
+            
+            # Fallback to context-aware analysis if AI fails
+            return self._analyze_natural_gaps(user_query, gathered_info)
+            
+        except Exception as e:
+            self.logger.warning(f"AI gap identification failed: {e}")
+            return self._analyze_natural_gaps(user_query, gathered_info)
+    
+    def _analyze_natural_gaps(self, user_query: str, gathered_info: Dict[str, Any]) -> List[str]:
+        """Analyze natural information gaps without predefined categories."""
+        gaps = []
+        query_words = user_query.lower().split()
         
-        # Define category triggers
-        category_mapping = {
-            'expertise_level': ['beginner', 'expert', 'experienced', 'new to', 'familiar', 'learn'],
-            'budget': ['budget', 'cost', 'price', 'expensive', 'cheap', 'affordable', '$', 'buy', 'purchase'],
-            'timeline': ['urgent', 'quick', 'fast', 'deadline', 'time', 'when', 'soon'],
-            'context': ['for', 'work', 'personal', 'business', 'school', 'project'],
-            'preferences': ['prefer', 'like', 'dislike', 'avoid', 'want', 'need', 'best'],
-            'constraints': ['cannot', 'limitation', 'restriction', 'must', 'requirement']
-        }
+        # If very little info gathered, identify core decision factors
+        if len(gathered_info) < 2:
+            # Analyze query intent to suggest relevant information needs
+            if any(word in query_words for word in ['buy', 'purchase', 'cost', 'price']):
+                gaps.append('budget_parameters')
+            if any(word in query_words for word in ['best', 'recommend', 'choose']):
+                gaps.append('selection_criteria')
+            if any(word in query_words for word in ['need', 'want', 'looking']):
+                gaps.append('specific_requirements')
+            if any(word in query_words for word in ['work', 'business', 'personal', 'home']):
+                gaps.append('usage_context')
+        else:
+            # Analyze what themes are present vs what might be missing
+            covered_themes = set()
+            for key, value in gathered_info.items():
+                # Extract semantic themes from existing information
+                value_str = str(value).lower()
+                if any(word in value_str for word in ['budget', 'cost', 'price', 'money']):
+                    covered_themes.add('financial_considerations')
+                if any(word in value_str for word in ['time', 'urgent', 'deadline', 'soon']):
+                    covered_themes.add('timing_constraints')
+                if any(word in value_str for word in ['quality', 'performance', 'reliability']):
+                    covered_themes.add('quality_expectations')
+                if any(word in value_str for word in ['experience', 'skill', 'expert', 'beginner']):
+                    covered_themes.add('experience_context')
+            
+            # Suggest complementary areas based on query type
+            potential_themes = {
+                'financial_considerations', 'timing_constraints', 
+                'quality_expectations', 'usage_patterns', 'experience_context',
+                'success_metrics', 'constraint_factors'
+            }
+            
+            missing_themes = potential_themes - covered_themes
+            gaps.extend(list(missing_themes)[:4])
         
-        # Identify relevant categories
-        relevant_categories = []
-        for category, triggers in category_mapping.items():
-            if any(trigger in query_lower for trigger in triggers):
-                relevant_categories.append(category)
-        
-        # Always consider these as important if not present
-        always_important = ['context', 'preferences']
-        for category in always_important:
-            if category not in relevant_categories:
-                relevant_categories.append(category)
-        
-        # Find missing categories
-        missing = [cat for cat in relevant_categories if cat not in gathered_info]
-        
-        return missing
+        return gaps[:5]
     
     def _generate_sufficiency_assessment(self, confidence: float, gaps: List[InformationGap], missing_categories: List[str]) -> str:
         """Generate human-readable sufficiency assessment."""
@@ -351,38 +409,41 @@ class CompletionAssessment:
         return ". ".join(reasoning_parts) + "."
     
     def _create_gap_identification_prompt(self, user_query: str, gathered_info: Dict[str, Any]) -> str:
-        """Create AI prompt for gap identification."""
+        """Create AI prompt for dynamic gap identification."""
         gathered_info_str = json.dumps(gathered_info, indent=2) if gathered_info else "None"
         
-        return f"""Analyze this conversation between a user and an AI research agent:
+        return f"""Analyze this research conversation and identify information gaps that would significantly improve research quality:
 
-USER QUERY: {user_query}
-GATHERED INFORMATION: {gathered_info_str}
+USER'S QUERY: {user_query}
+CURRENT INFORMATION: {gathered_info_str}
 
-Identify critical information gaps that would improve research quality. Consider:
-1. What specific details about the user's context are missing?
-2. What preferences or constraints haven't been explored?
-3. What background information would help personalize the research?
+Identify specific information gaps that are genuinely missing and would help provide better research. Focus on:
+1. What practical context about their situation is unclear?
+2. What constraints or requirements haven't been explored?
+3. What would help understand their success criteria?
+4. What background would improve recommendation relevance?
 
-Respond with a JSON array of gaps, each with:
-- category: the information category (e.g., "expertise_level", "constraints")
-- importance: "critical", "important", or "nice_to_have"
-- suggested_question: a natural follow-up question
-- context_dependency: list of related categories
+Respond with a JSON array of gaps. Each gap should have:
+- area_description: what information area is missing (be specific, not generic)
+- importance_level: "critical", "important", or "helpful"  
+- suggested_question: a natural follow-up question to gather this info
+- research_impact: how this would improve research quality
+
+Focus on gaps that are actually relevant to THIS user's specific query. Avoid generic categories.
 
 Example format:
 [
   {{
-    "category": "expertise_level",
-    "importance": "critical",
-    "suggested_question": "What's your experience level with this topic?",
-    "context_dependency": ["background", "goals"]
+    "area_description": "budget_constraints_for_purchase",
+    "importance_level": "critical",
+    "suggested_question": "What's your budget range for this purchase?",
+    "research_impact": "Filters recommendations to affordable options"
   }}
 ]
 """
     
     def _parse_gap_response(self, response_text: str) -> List[InformationGap]:
-        """Parse AI response into InformationGap objects."""
+        """Parse AI response into InformationGap objects with dynamic categories."""
         try:
             # Extract JSON from response
             start = response_text.find('[')
@@ -396,12 +457,23 @@ Example format:
             
             gaps = []
             for gap_data in gaps_data:
-                gap = InformationGap(
-                    category=gap_data.get('category', 'unknown'),
-                    importance=gap_data.get('importance', 'nice_to_have'),
-                    suggested_question=gap_data.get('suggested_question', ''),
-                    context_dependency=gap_data.get('context_dependency', [])
-                )
+                # Handle both old and new formats
+                if 'area_description' in gap_data:
+                    # New dynamic format
+                    gap = InformationGap(
+                        category=gap_data.get('area_description', 'unknown'),
+                        importance=gap_data.get('importance_level', 'helpful'),
+                        suggested_question=gap_data.get('suggested_question', ''),
+                        context_dependency=[gap_data.get('research_impact', '')]
+                    )
+                else:
+                    # Fallback to old format
+                    gap = InformationGap(
+                        category=gap_data.get('category', 'unknown'),
+                        importance=gap_data.get('importance', 'nice_to_have'),
+                        suggested_question=gap_data.get('suggested_question', ''),
+                        context_dependency=gap_data.get('context_dependency', [])
+                    )
                 gaps.append(gap)
             
             return gaps
@@ -411,37 +483,65 @@ Example format:
             return []
     
     def _identify_gaps_rule_based(self, user_query: str, gathered_info: Dict[str, Any]) -> List[InformationGap]:
-        """Fallback rule-based gap identification."""
+        """Fallback rule-based gap identification without predefined categories."""
         gaps = []
         query_lower = user_query.lower()
         
-        # Common gap patterns
-        if 'expertise_level' not in gathered_info:
-            if any(word in query_lower for word in ['learn', 'understand', 'new', 'beginner']):
-                gaps.append(InformationGap(
-                    category='expertise_level',
-                    importance='important',
-                    suggested_question='What is your experience level with this topic?',
-                    context_dependency=['background']
-                ))
+        # Dynamic gap detection based on query analysis
+        query_themes = {
+            'learning_context': ['learn', 'understand', 'new', 'beginner', 'how to'],
+            'purchase_decision': ['buy', 'purchase', 'cost', 'budget', '$', 'price'],
+            'time_sensitive': ['urgent', 'quick', 'soon', 'deadline', 'asap'],
+            'comparative_choice': ['best', 'better', 'compare', 'vs', 'difference'],
+            'technical_implementation': ['implement', 'setup', 'configure', 'install']
+        }
         
-        if 'budget' not in gathered_info:
-            if any(word in query_lower for word in ['buy', 'purchase', 'cost', 'budget', '$']):
-                gaps.append(InformationGap(
-                    category='budget',
-                    importance='critical',
-                    suggested_question='Do you have a budget range in mind?',
-                    context_dependency=['preferences']
-                ))
+        detected_themes = []
+        for theme, keywords in query_themes.items():
+            if any(keyword in query_lower for keyword in keywords):
+                detected_themes.append(theme)
         
-        if 'timeline' not in gathered_info:
-            if any(word in query_lower for word in ['urgent', 'quick', 'soon', 'deadline']):
-                gaps.append(InformationGap(
-                    category='timeline',
-                    importance='important',
-                    suggested_question='What is your timeline for this?',
-                    context_dependency=['context']
-                ))
+        # Generate contextual gaps based on detected themes
+        if 'learning_context' in detected_themes and not any('experience' in str(v) for v in gathered_info.values()):
+            gaps.append(InformationGap(
+                category='experience_and_background_context',
+                importance='important',
+                suggested_question='What is your current experience level with this topic?',
+                context_dependency=['learning_path_optimization']
+            ))
+        
+        if 'purchase_decision' in detected_themes and not any('budget' in str(v) or 'cost' in str(v) for v in gathered_info.values()):
+            gaps.append(InformationGap(
+                category='financial_constraints_and_budget',
+                importance='critical',
+                suggested_question='Do you have a budget range in mind for this?',
+                context_dependency=['option_filtering', 'value_assessment']
+            ))
+        
+        if 'time_sensitive' in detected_themes and not any('timeline' in str(v) or 'deadline' in str(v) for v in gathered_info.values()):
+            gaps.append(InformationGap(
+                category='timeline_and_urgency_factors',
+                importance='important',
+                suggested_question='What is your timeline for making this decision?',
+                context_dependency=['priority_sequencing', 'quick_wins']
+            ))
+        
+        if 'comparative_choice' in detected_themes and not any('criteria' in str(v) or 'important' in str(v) for v in gathered_info.values()):
+            gaps.append(InformationGap(
+                category='decision_criteria_and_priorities',
+                importance='important',
+                suggested_question='What factors are most important to you in making this choice?',
+                context_dependency=['comparison_framework', 'weighting_factors']
+            ))
+        
+        # Context-specific gaps if little information gathered
+        if len(gathered_info) < 2:
+            gaps.append(InformationGap(
+                category='usage_context_and_requirements',
+                importance='important',
+                suggested_question='Can you tell me more about how you plan to use this?',
+                context_dependency=['personalization', 'requirement_matching']
+            ))
         
         return gaps
     

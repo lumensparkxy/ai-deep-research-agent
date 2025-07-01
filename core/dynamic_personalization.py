@@ -4,6 +4,7 @@ Main orchestration class that integrates conversation state, AI question generat
 context analysis, and conversation memory to create intelligent, adaptive conversations.
 """
 
+import json
 import logging
 import time
 import re
@@ -371,43 +372,131 @@ class DynamicPersonalizationEngine:
     
     def _identify_information_gaps(self, conversation_state: ConversationState) -> List[str]:
         """Identify key information gaps using AI-driven analysis rather than predefined categories."""
-        # Use AI to analyze what's missing rather than checking predefined buckets
+        try:
+            # Use AI to discover what's missing contextually
+            prompt = f"""Analyze this research conversation to identify what key information is missing:
+
+USER'S ORIGINAL QUERY: {conversation_state.user_query}
+
+CONVERSATION HISTORY:
+{self._format_conversation_for_analysis(conversation_state)}
+
+CURRENT USER PROFILE:
+{json.dumps(conversation_state.user_profile, indent=2) if conversation_state.user_profile else "No profile information yet"}
+
+Based on the user's specific query and what's been discussed, identify 3-5 information areas that are missing and would genuinely improve research quality. Think about:
+- What context about their specific situation is unclear?
+- What practical factors haven't been explored?
+- What would help understand their success criteria?
+- What constraints or preferences are unknown?
+
+Return only a JSON array of specific information gap descriptions (as strings). Be specific to this user's actual needs, not generic categories.
+
+Example: ["budget_constraints_for_software", "team_size_and_collaboration_needs", "integration_requirements_with_existing_systems"]
+"""
+
+            response = self.research_engine.gemini_client._make_request(prompt)
+            
+            if response and '[' in response and ']' in response:
+                start = response.find('[')
+                end = response.rfind(']') + 1
+                json_text = response[start:end]
+                
+                try:
+                    gaps = json.loads(json_text)
+                    if isinstance(gaps, list) and all(isinstance(item, str) for item in gaps):
+                        self.logger.debug(f"AI identified contextual gaps: {gaps}")
+                        return gaps[:5]
+                except json.JSONDecodeError:
+                    pass
+            
+            # Fallback to contextual analysis
+            return self._analyze_contextual_gaps(conversation_state)
+            
+        except Exception as e:
+            self.logger.warning(f"AI gap identification failed: {e}")
+            return self._analyze_contextual_gaps(conversation_state)
+    
+    def _analyze_contextual_gaps(self, conversation_state: ConversationState) -> List[str]:
+        """Analyze information gaps based on conversation context without predefined categories."""
         gaps = []
         
         # Analyze conversation flow for natural gaps
         questions_asked = len(conversation_state.question_history)
         info_gathered = len(conversation_state.user_profile)
         
-        # If we have very little information, focus on core decision factors
-        if info_gathered < 3:
-            gaps = [
-                'core_priorities',
-                'key_requirements', 
-                'practical_constraints',
-                'decision_criteria'
-            ]
+        # Early conversation - focus on foundational understanding
+        if info_gathered < 2:
+            query_lower = conversation_state.user_query.lower()
+            
+            # Infer what might be missing based on query intent
+            if any(word in query_lower for word in ['buy', 'purchase', 'cost']):
+                gaps.append('financial_parameters_and_constraints')
+            if any(word in query_lower for word in ['best', 'recommend', 'choose']):
+                gaps.append('selection_criteria_and_priorities')
+            if any(word in query_lower for word in ['work', 'business', 'team']):
+                gaps.append('organizational_context_and_requirements')
+            if any(word in query_lower for word in ['learn', 'understand', 'new']):
+                gaps.append('background_and_experience_context')
+            
+            gaps.append('specific_use_case_and_requirements')
+            
         else:
-            # Analyze existing information to find natural gaps
-            profile_themes = list(conversation_state.user_profile.keys())
+            # Later conversation - analyze what themes are covered vs missing
+            profile_content = ' '.join(str(v) for v in conversation_state.user_profile.values()).lower()
             
-            # Common decision-making areas that might be missing
-            potential_areas = [
-                'budget_considerations',
-                'timeline_factors', 
-                'usage_scenarios',
-                'quality_expectations',
-                'deal_breakers',
-                'success_criteria'
-            ]
+            # Check for missing thematic areas
+            covered_themes = set()
+            if any(word in profile_content for word in ['budget', 'cost', 'price', 'money']):
+                covered_themes.add('financial_aspects')
+            if any(word in profile_content for word in ['time', 'deadline', 'urgent', 'timeline']):
+                covered_themes.add('temporal_constraints')
+            if any(word in profile_content for word in ['team', 'organization', 'company', 'work']):
+                covered_themes.add('organizational_context')
+            if any(word in profile_content for word in ['quality', 'performance', 'reliability']):
+                covered_themes.add('quality_expectations')
+            if any(word in profile_content for word in ['experience', 'skill', 'background']):
+                covered_themes.add('expertise_context')
             
-            # Find areas not yet covered based on actual conversation themes
-            for area in potential_areas:
-                area_covered = any(theme in area or area in theme for theme in profile_themes)
-                if not area_covered:
-                    gaps.append(area)
+            # Suggest complementary information areas
+            potential_gaps = []
+            if 'financial_aspects' not in covered_themes:
+                potential_gaps.append('budget_and_cost_considerations')
+            if 'temporal_constraints' not in covered_themes:
+                potential_gaps.append('timeline_and_urgency_factors')
+            if 'organizational_context' not in covered_themes:
+                potential_gaps.append('organizational_environment_and_constraints')
+            if 'quality_expectations' not in covered_themes:
+                potential_gaps.append('quality_and_performance_requirements')
+            if 'expertise_context' not in covered_themes:
+                potential_gaps.append('experience_level_and_technical_background')
+            
+            # Add general decision-making gaps
+            potential_gaps.extend([
+                'success_criteria_and_measurement',
+                'decision_constraints_and_limitations',
+                'stakeholder_considerations'
+            ])
+            
+            # Filter out already covered areas and return most relevant
+            gaps = [gap for gap in potential_gaps if not any(
+                theme in gap.lower() for theme in covered_themes
+            )][:4]
         
-        self.logger.debug(f"Identified natural information gaps: {gaps[:5]}")
-        return gaps[:5]  # Return top 5 gaps
+        self.logger.debug(f"Identified contextual information gaps: {gaps}")
+        return gaps
+    
+    def _format_conversation_for_analysis(self, conversation_state: ConversationState) -> str:
+        """Format conversation history for AI analysis."""
+        if not conversation_state.question_history:
+            return "No conversation history yet"
+        
+        formatted = []
+        for i, (question, answer) in enumerate(conversation_state.question_history):
+            formatted.append(f"Q{i+1}: {question}")
+            formatted.append(f"A{i+1}: {answer}")
+        
+        return '\n'.join(formatted)
     
     def _extract_focus_areas(self, initial_context: Dict[str, Any]) -> List[str]:
         """Extract focus areas from initial context analysis."""

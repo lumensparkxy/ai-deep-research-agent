@@ -79,7 +79,7 @@ validation:
   query_min_length: 5
   query_max_length: 500
   string_max_length: 1000
-  personalization_key_max_length: 50
+  personalization_key_max_length: 100  # Increased to accommodate dynamic, descriptive gap categories
   personalization_value_max_length: 200
   personalization_list_item_max_length: 100
   personalization_list_max_size: 10
