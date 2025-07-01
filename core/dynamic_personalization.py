@@ -113,12 +113,27 @@ class DynamicPersonalizationEngine:
         """
         Generate the next intelligent question using pure AI without category constraints.
         
-        Args:
-            conversation_state: Current state of the conversation
-            additional_context: Optional additional context to guide question generation
+        Uses advanced AI-driven analysis to determine the most valuable next question
+        based on conversation flow, user engagement, and information gaps without
+        relying on predefined categories or templates.
+        
+        Parameters:
+            conversation_state: Current state of the conversation including history,
+                              user profile, and priority factors
+            additional_context: Optional additional context string to guide question 
+                              generation (e.g., specific focus areas)
             
         Returns:
-            str: Next question to ask, or None if conversation is complete
+            Next question to ask as a string, or None if conversation is deemed
+            complete based on information sufficiency and user engagement metrics
+            
+        Example:
+            ```python
+            engine = DynamicPersonalizationEngine()
+            state = engine.initialize_conversation("laptop for gaming", "session_123")
+            question = engine.generate_next_question(state)
+            # Returns: "What's most important to you when choosing a gaming laptop?"
+            ```
         """
         try:
             # Check if we should continue the conversation
@@ -156,13 +171,34 @@ class DynamicPersonalizationEngine:
         """
         Process user response using pure AI analysis without category constraints.
         
-        Args:
-            conversation_state: Current conversation state
-            question: The question that was asked
-            response: User's response to the question
+        Analyzes user responses using contextual AI to extract personalization
+        information, update conversation state, and track question effectiveness
+        without relying on predefined categories.
+        
+        Parameters:
+            conversation_state: Current conversation state to be updated
+            question: The question that was asked to the user
+            response: User's response text to analyze
             
         Returns:
-            Dict containing extracted information and analysis
+            Dictionary containing:
+            - extracted_info: New personalization data extracted from response
+            - response_analysis: AI analysis including priorities and emotional indicators
+            - updated_priority_factors: Current priority factors after update
+            - conversation_progress: Progress metrics and completion estimates
+            
+        Raises:
+            Exception: If response processing fails, returns empty dict
+            
+        Example:
+            ```python
+            result = engine.process_user_response(
+                conversation_state,
+                "What's most important to you?",
+                "I need something reliable for work presentations"
+            )
+            # Returns: {'extracted_info': {'reliability_priority': '...'}, ...}
+            ```
         """
         try:
             self.logger.debug(f"Processing response to: {question[:50]}...")
@@ -242,11 +278,31 @@ class DynamicPersonalizationEngine:
         """
         Generate a comprehensive summary of the conversation state.
         
-        Args:
-            conversation_state: Current conversation state
+        Creates a detailed summary including conversation metrics, quality assessment,
+        key insights, and research recommendations based on the full conversation
+        history and user profile data.
+        
+        Parameters:
+            conversation_state: Current conversation state to summarize
             
         Returns:
-            Dict containing conversation summary and insights
+            Dictionary containing:
+            - session_id: Session identifier
+            - conversation_length: Number of questions asked
+            - user_profile_completeness: Amount of profile information gathered
+            - priority_factors: Current priority factor mapping
+            - progress_metrics: Conversation progress and depth metrics
+            - quality_assessment: Quality indicators for the conversation
+            - key_insights: Important insights discovered during conversation
+            - research_recommendations: Suggested focus areas for research
+            - metadata: Additional conversation metadata
+            
+        Example:
+            ```python
+            summary = engine.get_conversation_summary(conversation_state)
+            print(f"Gathered {summary['user_profile_completeness']} data points")
+            print(f"Key insights: {summary['key_insights']}")
+            ```
         """
         try:
             # Calculate conversation metrics
@@ -284,11 +340,29 @@ class DynamicPersonalizationEngine:
         """
         Adapt conversation strategy based on current progress and user patterns.
         
-        Args:
-            conversation_state: Current conversation state
+        Analyzes conversation patterns, user engagement, and efficiency metrics
+        to provide strategic recommendations for optimizing the conversation flow
+        and improving information gathering.
+        
+        Parameters:
+            conversation_state: Current conversation state to analyze
             
         Returns:
-            Dict containing strategy adaptations and recommendations
+            Dictionary containing:
+            - detected_patterns: Conversation patterns and trends identified
+            - engagement_level: Current user engagement assessment (high/medium/low)
+            - recommended_question_types: Optimal question types for current state
+            - efficiency_metrics: Conversation efficiency measurements
+            - strategy_recommendations: Specific strategic recommendations for improvement
+            
+        Example:
+            ```python
+            strategy = engine.adapt_conversation_strategy(conversation_state)
+            if strategy['engagement_level'] == 'low':
+                # Implement strategy recommendations
+                for rec in strategy['strategy_recommendations']:
+                    print(f"Strategy: {rec}")
+            ```
         """
         try:
             # Analyze conversation patterns
@@ -323,7 +397,26 @@ class DynamicPersonalizationEngine:
     # Private helper methods
     
     def _should_continue_conversation(self, conversation_state: ConversationState) -> bool:
-        """Determine if conversation should continue based on AI-driven assessment."""
+        """
+        Determine if conversation should continue based on AI-driven assessment.
+        
+        Evaluates conversation progress using multiple criteria including question
+        count, information density, user engagement patterns, and response quality
+        to make intelligent decisions about conversation completion.
+        
+        Parameters:
+            conversation_state: Current conversation state to evaluate
+            
+        Returns:
+            True if conversation should continue, False if sufficient information
+            has been gathered or user engagement is declining
+            
+        Notes:
+            - Hard limit of 8 questions maximum
+            - Stops early if high information density (4+ data points with 70%+ density)
+            - Considers user engagement based on response patterns
+            - Balances thoroughness with user experience
+        """
         questions_asked = len(conversation_state.question_history)
         info_gathered = len(conversation_state.user_profile)
         
@@ -775,8 +868,25 @@ Example: ["budget_constraints_for_software", "team_size_and_collaboration_needs"
     
     def _generate_pure_ai_question_unconstrained(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
         """
-        Use pure AI to generate the next intelligent question without any category or template constraints.
-        Let the AI naturally discover what to ask based on conversation flow and user context.
+        Use pure AI to generate the next intelligent question without constraints.
+        
+        Employs advanced AI prompting to generate natural, contextual questions
+        that build on conversation flow without relying on predefined categories
+        or templates. Includes fallback mechanisms for reliability.
+        
+        Parameters:
+            conversation_state: Current conversation state for context
+            asked_questions: List of previously asked questions to avoid repetition
+            additional_context: Optional additional context for question generation
+            
+        Returns:
+            Generated question string, or None if generation fails
+            
+        Notes:
+            - Uses conversation-aware prompting for natural progression
+            - Implements retry logic with progressive backoff
+            - Falls back to contextual questions if AI generation fails
+            - Checks for question conflicts with conversation flow
         """
         try:
             # Check if Gemini client is available

@@ -75,3 +75,7 @@ htmlcov/
 
 # Documentation builds
 docs/_build/
+html_docs/
+docs/api/
+*.docs/
+site/
