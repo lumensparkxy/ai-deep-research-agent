@@ -242,6 +242,16 @@ class Settings:
     def fallback_max_retries(self) -> int:
         return self.config.get("ai", {}).get("fallback_max_retries", 3)
     
+    # Cache Settings
+    @property
+    def cache_enabled(self) -> bool:
+        env_val = os.getenv("CACHE_ENABLED", "true").lower()
+        return env_val in ("true", "1", "yes") and self.config.get("cache", {}).get("enabled", True)
+
+    @property
+    def cache_dir(self) -> str:
+        return os.getenv("CACHE_DIR", self.config.get("cache", {}).get("directory", "./data/cache"))
+
     # Research Settings
     @property
     def research_depth(self) -> str:

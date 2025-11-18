@@ -27,7 +27,7 @@ class TestSettings:
 
             assert settings.app_name == "Deep Research Agent"
             assert settings.gemini_api_key == "test_key"
-            assert settings.ai_model == "gemini-1.5-pro-latest"
+            assert settings.ai_model == "gemini-2.5-flash"
             assert settings.debug_mode is False
 
     def test_settings_missing_api_key(self):

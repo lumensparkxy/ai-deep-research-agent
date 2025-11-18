@@ -80,6 +80,10 @@ def mock_settings(temp_dir):
     settings.fallback_retry_delay = 2.0  # Float for fallback retry delay
     settings.progress_bar_length = 40  # Integer for progress bar display
     
+    # Cache settings
+    settings.cache_enabled = True
+    settings.cache_dir = str(temp_dir / "cache")
+
     return settings
 
 

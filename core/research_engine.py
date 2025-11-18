@@ -16,6 +16,7 @@ from google.genai import types
 from config.settings import Settings
 from utils.session_manager import SessionManager
 from utils.validators import InputValidator, ValidationError
+from utils.cache_manager import CacheManager
 
 
 class ResearchEngine:
@@ -27,6 +28,7 @@ class ResearchEngine:
         self.session_manager = SessionManager(settings)
         self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
+        self.cache_manager = CacheManager(settings.cache_dir, settings.cache_enabled)
         
         # Configure Gemini AI
         self._setup_gemini()
@@ -276,6 +278,12 @@ class ResearchEngine:
     
     def _call_gemini_with_retry(self, prompt: str, max_retries: int = None) -> str:
         """Call Gemini API with retry logic."""
+        # Check cache first
+        cache_key = f"{self.model_name}:{prompt}"
+        cached_response = self.cache_manager.get(cache_key)
+        if cached_response:
+            return cached_response
+
         # Determine number of retries; coerce to int and fallback to default 3
         try:
             max_retries = int(max_retries) if isinstance(max_retries, (int, str)) else None
@@ -318,6 +326,8 @@ class ResearchEngine:
                 )
                 
                 if response.text:
+                    # Cache the successful response
+                    self.cache_manager.set(cache_key, response.text)
                     return response.text
                 # Empty response is a terminal validation error
                 raise ValidationError("Empty response from Gemini")

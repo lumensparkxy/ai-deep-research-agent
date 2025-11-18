@@ -58,6 +58,7 @@ logs/
 # Data Files (Keep structure, ignore content)
 data/sessions/*.json
 data/reports/*.md
+data/cache/
 
 # Keep data directories but ignore contents
 !data/sessions/.gitkeep
