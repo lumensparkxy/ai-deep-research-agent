@@ -543,3 +543,69 @@ class ConversationHandler:
                     
             except (KeyboardInterrupt, EOFError):
                 raise
+    
+    def _get_mode_question_prefix(self, mode: ConversationMode, current: int, total: int) -> str:
+        """Get mode-specific question prefix."""
+        if mode == ConversationMode.QUICK:
+            return f"⚡ Quick Question {current}/{total}:"
+        elif mode == ConversationMode.DEEP:
+            return f"🔍 Deep Dive {current}/{total}:"
+        elif mode == ConversationMode.ADAPTIVE:
+            return f"🔄 Adaptive Question {current}:"
+        else:
+            return f"❓ Question {current}/{total}:"
+    
+    def _get_mode_acknowledgment(self, mode: ConversationMode, current: int) -> str:
+        """Get mode-specific acknowledgment."""
+        acknowledgments = {
+            ConversationMode.QUICK: ["Got it.", "Noted.", "Okay."],
+            ConversationMode.STANDARD: ["Thanks, that helps.", "Understood.", "Good to know."],
+            ConversationMode.DEEP: ["That's very helpful context.", "I appreciate that detail.", "This is important for the analysis."],
+            ConversationMode.ADAPTIVE: ["Interesting.", "I see.", "That guides my next question."]
+        }
+        import random
+        return random.choice(acknowledgments.get(mode, ["Got it."]))
+    
+    def _determine_new_mode(self, current_mode: ConversationMode, metrics: EngagementMetrics, signals: UserSignals) -> ConversationMode:
+        """Determine the new mode based on engagement and signals."""
+        # Simple logic for now, can be expanded
+        if metrics.average_response_length > 50 and current_mode == ConversationMode.QUICK:
+            return ConversationMode.STANDARD
+        elif metrics.average_response_length > 100 and current_mode == ConversationMode.STANDARD:
+            return ConversationMode.DEEP
+        elif metrics.average_response_length < 10 and current_mode == ConversationMode.DEEP:
+            return ConversationMode.STANDARD
+        return current_mode
+    
+    def _show_personalization_completion(self, mode: ConversationMode, count: int, context: Dict[str, Any]) -> None:
+        """Show personalization completion summary."""
+        print("\n✅ Personalization Complete!")
+        print(f"   Mode used: {mode.value.title()}")
+        print(f"   Questions asked: {count}")
+        
+        insights = context.get('conversation_insights', {}).get('key_insights', [])
+        if insights:
+            print("\n🔑 Key Insights Gathered:")
+            for insight in insights[:3]:
+                print(f"   • {insight}")
+        print()
+    
+    def _show_completion_message(self, session_id: str, report_path: str, research_results: Dict[str, Any]) -> None:
+        """
+        Show completion message with session details.
+        
+        Args:
+            session_id: The session ID
+            report_path: Path to the generated report
+            research_results: The results of the research
+        """
+        print("\n✅ Research Session Completed Successfully!")
+        print("=" * 60)
+        print(f"🆔 Session ID: {session_id}")
+        print(f"📄 Report: {report_path}")
+        
+        confidence = research_results.get('confidence_score', 0.0)
+        print(f"🎯 Confidence Score: {confidence:.2f}")
+        
+        print("\nYou can view the full report in the path above.")
+        print("Thank you for using Deep Research Agent!")

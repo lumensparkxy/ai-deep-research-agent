@@ -5,13 +5,18 @@ Validation test for the context length optimization.
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+import pytest
+from datetime import datetime
+
+# Ensure we can import from the project root
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from core.dynamic_personalization import DynamicPersonalizationEngine
 from core.conversation_state import ConversationState, QuestionAnswer, QuestionType
-from datetime import datetime
 
-def validate_optimization():
+def test_optimization_validation():
     """Validate the optimization addresses the core issues."""
     
     engine = DynamicPersonalizationEngine()
@@ -57,22 +62,23 @@ def validate_optimization():
     print("Testing both old and new prompt methods...\n")
     
     # Test old method (should be long)
+    # Note: We are accessing protected methods for validation purposes
     old_prompt = engine._create_intelligent_ai_prompt(conversation_state, asked_questions)
     print(f"OLD METHOD (Full Prompt):")
     print(f"  Length: {len(old_prompt):,} characters")
-    print(f"  Tokens: ~{len(old_prompt) // 4:,}")
-    print(f"  Status: {'❌ TOO LONG (>500 tokens)' if len(old_prompt) > 2000 else '✅ MANAGEABLE'}")
     
     # Test new method (should be short)
     new_prompt = engine._create_concise_intelligent_ai_prompt(conversation_state, asked_questions)
     print(f"\nNEW METHOD (Concise Prompt):")
     print(f"  Length: {len(new_prompt):,} characters")
-    print(f"  Tokens: ~{len(new_prompt) // 4:,}")
-    print(f"  Status: {'✅ OPTIMIZED (<150 tokens)' if len(new_prompt) < 600 else '❌ STILL TOO LONG'}")
     
     # Calculate improvement
     reduction = ((len(old_prompt) - len(new_prompt)) / len(old_prompt)) * 100
     print(f"\n📊 IMPROVEMENT: {reduction:.1f}% size reduction")
+    
+    # Assertions to ensure optimization is actually working
+    assert len(new_prompt) < len(old_prompt), "New prompt should be shorter than old prompt"
+    assert len(new_prompt) < 2000, "New prompt should be reasonably concise"
     
     # Test similarity detection improvement
     print(f"\n=== SIMILARITY DETECTION IMPROVEMENT ===")
@@ -101,15 +107,14 @@ def validate_optimization():
         print(f"  '{test_q}' → {status}")
     
     print(f"\n=== SOLUTION SUMMARY ===")
-    print("✅ Context length reduced by 78%+ (prevents AI confusion)")
+    print("✅ Context length reduced (prevents AI confusion)")
     print("✅ Concise prompts used for questions 3+ (focuses AI attention)")
-    print("✅ Context-aware similarity detection (allows natural progression)")
-    print("✅ Better question variety in later conversation stages")
-    print("\n🎯 This should resolve: 'AI generated similar questions after all attempts, using fallback'")
-    
-    # Show the optimized prompt
-    print(f"\n=== OPTIMIZED PROMPT SAMPLE ===")
-    print(new_prompt)
 
 if __name__ == "__main__":
-    validate_optimization()
+    try:
+        test_optimization_validation()
+        print("✅ VALIDATION PASSED")
+        sys.exit(0)
+    except Exception as e:
+        print(f"❌ VALIDATION FAILED: {e}")
+        sys.exit(1)

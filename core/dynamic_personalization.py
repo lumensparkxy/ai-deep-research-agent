@@ -106,12 +106,13 @@ class DynamicPersonalizationEngine:
             self.logger.error(f"Error initializing conversation: {e}")
             raise
     
-    def generate_next_question(self, conversation_state: ConversationState) -> Optional[str]:
+    def generate_next_question(self, conversation_state: ConversationState, additional_context: Optional[str] = None) -> Optional[str]:
         """
         Generate the next intelligent question based on conversation context using AI.
         
         Args:
             conversation_state: Current state of the conversation
+            additional_context: Optional additional context or instructions for the AI
             
         Returns:
             str: Next question to ask, or None if conversation is complete
@@ -126,7 +127,7 @@ class DynamicPersonalizationEngine:
             asked_questions = [qa.question for qa in conversation_state.question_history]
             
             # Generate intelligent question using AI without rigid categories
-            question = self._generate_intelligent_ai_question(conversation_state, asked_questions)
+            question = self._generate_intelligent_ai_question(conversation_state, asked_questions, additional_context)
             
             if question:
                 self.logger.debug(f"Generated intelligent question: {question[:50]}...")
@@ -718,7 +719,7 @@ class DynamicPersonalizationEngine:
         
         return available[0] if available else 'general_feedback'
     
-    def _generate_intelligent_ai_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
+    def _generate_intelligent_ai_question(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
         """Generate an intelligent question using pure AI without rigid categories."""
         try:
             # Check if Gemini client is available and functional
@@ -728,13 +729,13 @@ class DynamicPersonalizationEngine:
             
             # Try to use Gemini AI for intelligent question generation
             self.logger.debug("Attempting AI question generation...")
-            return self._generate_pure_ai_question(conversation_state, asked_questions)
+            return self._generate_pure_ai_question(conversation_state, asked_questions, additional_context)
                 
         except Exception as e:
             self.logger.warning(f"AI question generation failed with error: {str(e)[:200]}..., using fallback")
             return self._generate_simple_fallback_question(conversation_state, asked_questions)
     
-    def _generate_pure_ai_question(self, conversation_state: ConversationState, asked_questions: List[str]) -> Optional[str]:
+    def _generate_pure_ai_question(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> Optional[str]:
         """Use Gemini AI to generate the next intelligent question without category constraints."""
         try:
             # Use optimized prompt to prevent context overload and improve consistency
@@ -742,10 +743,10 @@ class DynamicPersonalizationEngine:
             
             # Switch to concise prompts after 2 questions to prevent AI confusion
             if questions_count >= 2:
-                prompt = self._create_concise_intelligent_ai_prompt(conversation_state, asked_questions)
+                prompt = self._create_concise_intelligent_ai_prompt(conversation_state, asked_questions, additional_context)
                 self.logger.debug(f"Using concise prompt for question {questions_count + 1} (length: {len(prompt)} chars)")
             else:
-                prompt = self._create_intelligent_ai_prompt(conversation_state, asked_questions)
+                prompt = self._create_intelligent_ai_prompt(conversation_state, asked_questions, additional_context)
                 self.logger.debug(f"Using full prompt for question {questions_count + 1} (length: {len(prompt)} chars)")
             
             # Improved timeout handling and retry logic
@@ -829,7 +830,7 @@ class DynamicPersonalizationEngine:
             
         return None
     
-    def _create_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str]) -> str:
+    def _create_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> str:
         """Create an engaging, conversational prompt for Gemini to generate natural questions."""
         # Build rich conversational context
         recent_qa = conversation_state.question_history[-2:] if len(conversation_state.question_history) >= 2 else conversation_state.question_history
@@ -846,6 +847,11 @@ class DynamicPersonalizationEngine:
             for key, value in list(conversation_state.user_profile.items())[:4]:  # Show more context
                 user_insights.append(f"{key}: {value}")
         
+        # Add additional context if provided (e.g., mode-specific instructions)
+        additional_instructions = ""
+        if additional_context:
+            additional_instructions = f"\nADDITIONAL INSTRUCTIONS:\n{additional_context}\n"
+        
         # Create warm, engaging prompt that encourages natural conversation
         prompt = f"""You are having a friendly, helpful conversation with someone seeking personalized advice about: "{conversation_state.user_query}"
 
@@ -857,7 +863,7 @@ WHAT YOU'VE LEARNED ABOUT THEM:
 
 QUESTIONS ALREADY ASKED:
 {chr(10).join([f"• {q}" for q in asked_questions[-5:]]) if asked_questions else "• None yet"}
-
+{additional_instructions}
 YOUR TASK: Ask ONE thoughtful follow-up question that feels natural and helps you understand what matters most to them for making a great recommendation.
 
 CONVERSATION STYLE:
@@ -886,7 +892,7 @@ Generate ONE natural, engaging question that builds on the conversation:"""
 
         return prompt
     
-    def _create_concise_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str]) -> str:
+    def _create_concise_intelligent_ai_prompt(self, conversation_state: ConversationState, asked_questions: List[str], additional_context: Optional[str] = None) -> str:
         """Create a concise, focused prompt optimized for consistent AI performance."""
         # Limit context to prevent AI confusion and improve consistency
         questions_count = len(conversation_state.question_history)
@@ -899,6 +905,11 @@ Generate ONE natural, engaging question that builds on the conversation:"""
             # Later stage: Focus on key insights and gaps
             context_info = self._get_focused_context(conversation_state, asked_questions)
         
+        # Add additional context if provided
+        additional_instructions = ""
+        if additional_context:
+            additional_instructions = f"\nADDITIONAL INSTRUCTIONS:\n{additional_context}\n"
+        
         # Create streamlined prompt
         prompt = f"""You are helping someone choose: "{conversation_state.user_query}"
 
@@ -908,7 +919,7 @@ CURRENT CONTEXT:
 AVOID REPEATING: {context_info['topics_covered']}
 
 FOCUS ON: {context_info['next_focus']}
-
+{additional_instructions}
 Generate ONE specific question (10-25 words) that helps them make a confident decision:"""
 
         return prompt

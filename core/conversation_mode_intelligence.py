@@ -85,6 +85,7 @@ class EngagementMetrics:
     detail_request_frequency: int
     impatience_indicators: List[str]
     interest_indicators: List[str]
+    average_response_length: float = 0.0
 
 
 class ConversationModeIntelligence:
@@ -567,10 +568,14 @@ class AdaptiveModeManager:
                             if any(phrase in response.lower() 
                                  for phrase in ["more detail", "tell me more", "explain", "how does"]))
         
+        # Calculate average response length
+        avg_length = sum(len(response.split()) for response in user_responses) / len(user_responses) if user_responses else 0.0
+        
         return EngagementMetrics(
             response_length_trend=length_trend,
             response_time_trend="normal",  # Would need actual timing data
             detail_request_frequency=detail_requests,
             impatience_indicators=impatience_indicators,
-            interest_indicators=interest_indicators
+            interest_indicators=interest_indicators,
+            average_response_length=avg_length
         )
