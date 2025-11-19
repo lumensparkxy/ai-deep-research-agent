@@ -297,6 +297,11 @@ class ResearchEngine:
         
         for attempt in range(max_retries):
             try:
+                # Configure tools (Google Search Grounding)
+                tools = None
+                if self.settings.enable_search or self.settings.enable_grounding:
+                    tools = [types.Tool(google_search=types.GoogleSearch())]
+
                 # Use new google-genai client API with safety settings
                 config = types.GenerateContentConfig(
                     safety_settings=[
@@ -316,7 +321,8 @@ class ResearchEngine:
                             category='HARM_CATEGORY_HARASSMENT',
                             threshold='BLOCK_MEDIUM_AND_ABOVE',
                         )
-                    ]
+                    ],
+                    tools=tools
                 )
                 
                 response = self.client.models.generate_content(
@@ -352,109 +358,118 @@ class ResearchEngine:
         if context.get("personalize") and context.get("user_info"):
             context_str = f"\nUser Context: {json.dumps(context['user_info'], indent=2)}"
         
-        return f"""You are a professional research analyst conducting initial information gathering for the following query:
+        return f"""You are a senior research analyst conducting a comprehensive initial investigation.
 
 QUERY: {query}
 {context_str}
 
-Please provide a comprehensive initial research analysis in the following JSON format:
+Your goal is to gather a broad and deep foundation of information. Do not settle for surface-level facts.
 
+Task:
+1. Identify the core concepts and entities associated with the query.
+2. Gather key facts, statistics, and definitions.
+3. Search for diverse perspectives and potential controversies.
+4. Identify primary sources of authority in this domain.
+
+Provide a JSON response:
 {{
-    "summary": "Brief overview of the topic and key considerations",
+    "summary": "A high-level executive summary of the initial landscape.",
     "key_facts": [
-        "Important fact 1",
-        "Important fact 2"
+        "Fact 1 (with context)",
+        "Fact 2 (with context)"
     ],
     "evidence": [
         {{
-            "source_description": "Description of information source",
-            "reliability_score": 0.8,
-            "extracted_text": "Relevant information or data point",
-            "relevance_score": 0.9
+            "source_description": "Specific report, study, or authority",
+            "reliability_score": 0.0-1.0,
+            "extracted_text": "Direct quote or specific data point",
+            "relevance_score": 0.0-1.0
         }}
     ],
     "gaps_identified": [
-        "What specific information is needed?",
-        "What questions remain unanswered?"
+        "Specific missing data point 1",
+        "Unclear relationship between X and Y"
     ],
     "research_areas": [
-        "Area 1 to explore further",
-        "Area 2 to investigate"
+        "Sub-topic 1 to explore in depth",
+        "Sub-topic 2 to explore in depth"
     ]
-}}
-
-Focus on providing factual, evidence-based information with reliable sources. Be thorough but concise."""
+}}"""
     
     def _build_stage_2_prompt(self, query: str, previous_findings: Dict[str, Any]) -> str:
         """Build prompt for Stage 2: Validation."""
-        return f"""You are fact-checking and validating previous research findings for this query:
+        return f"""You are a rigorous fact-checker and auditor. Your job is to validate the initial research findings and challenge assumptions.
 
 QUERY: {query}
 
-PREVIOUS FINDINGS TO VALIDATE:
+INITIAL FINDINGS:
 {json.dumps(previous_findings, indent=2)}
 
-Please validate these findings and provide your analysis in JSON format:
+Task:
+1. Verify the accuracy of the key facts. Are they up-to-date? Are they from biased sources?
+2. Identify any logical inconsistencies or contradictions.
+3. Flag information that lacks sufficient evidence.
+4. Distinguish between objective facts and subjective opinions.
 
+Provide a JSON response:
 {{
-    "summary": "Overview of validation results",
+    "summary": "Assessment of the research validity so far.",
     "validated_facts": [
-        "Confirmed accurate fact 1",
-        "Confirmed accurate fact 2"
+        "Fact 1 (Verified)",
+        "Fact 2 (Verified)"
     ],
     "questionable_information": [
-        "Information that needs verification",
-        "Conflicting or unclear data"
+        "Claim X is disputed by Source Y",
+        "Statistic Z is outdated (from 2019)"
     ],
     "additional_gaps": [
-        "New gaps discovered during validation",
-        "Areas needing more research"
+        "New gap discovered during verification"
     ],
     "reliability_assessment": {{
-        "overall_confidence": 0.8,
-        "strong_evidence": ["Well-supported finding 1"],
-        "weak_evidence": ["Finding needing more support"]
+        "overall_confidence": 0.0-1.0,
+        "strong_evidence": ["List of solid points"],
+        "weak_evidence": ["List of shaky points"]
     }}
-}}
-
-Be critical and thorough in your validation process."""
+}}"""
     
     def _build_stage_3_prompt(self, query: str, gaps: List[str]) -> str:
         """Build prompt for Stage 3: Clarification."""
-        gaps_str = "\n".join([f"- {gap}" for gap in gaps[:self.settings.max_gaps_per_stage]])  # Limit to avoid token limits
+        gaps_str = "\n".join([f"- {gap}" for gap in gaps[:self.settings.max_gaps_per_stage]])
         
-        return f"""You are conducting follow-up research to fill knowledge gaps for this query:
+        return f"""You are a targeted research specialist. Your goal is to close specific knowledge gaps.
 
 QUERY: {query}
 
-KNOWLEDGE GAPS TO ADDRESS:
+MISSING INFORMATION (GAPS):
 {gaps_str}
 
-Please provide targeted research to fill these gaps in JSON format:
+Task:
+1. Conduct focused research to answer EACH specific gap.
+2. If a gap cannot be fully resolved, explain why (e.g., data unavailability).
+3. Look for niche or specialized sources that might hold these specific answers.
 
+Provide a JSON response:
 {{
-    "summary": "Overview of follow-up research findings",
+    "summary": "Progress report on filling knowledge gaps.",
     "gap_responses": [
         {{
-            "gap": "The gap being addressed",
-            "findings": "Specific information found to address this gap",
-            "confidence": 0.8
+            "gap": "The specific gap being addressed",
+            "findings": "Detailed answer or explanation",
+            "confidence": 0.0-1.0
         }}
     ],
     "additional_evidence": [
         {{
-            "source_description": "New source description",
-            "reliability_score": 0.9,
-            "extracted_text": "New evidence found",
-            "relevance_score": 0.8
+            "source_description": "Source used for this gap",
+            "reliability_score": 0.0-1.0,
+            "extracted_text": "Relevant excerpt",
+            "relevance_score": 0.0-1.0
         }}
     ],
     "remaining_gaps": [
-        "Gaps that still need research"
+        "Gaps that are still critical and unaddressed"
     ]
-}}
-
-Focus on providing specific, actionable information to address each gap."""
+}}"""
     
     def _build_stage_4_prompt(self, query: str, all_findings: List[Dict], context: Dict[str, Any]) -> str:
         """Build prompt for Stage 4: Comparative Analysis."""
@@ -462,73 +477,79 @@ Focus on providing specific, actionable information to address each gap."""
         if context.get("constraints"):
             context_str = f"\nUser Constraints: {json.dumps(context['constraints'], indent=2)}"
         
-        return f"""You are conducting comparative analysis for this decision query:
+        return f"""You are a decision support analyst. Your goal is to systematically compare options to aid decision-making.
 
 QUERY: {query}
 {context_str}
 
-Based on all previous research, please provide a systematic comparison in JSON format:
+Task:
+1. Identify distinct options, solutions, or pathways relevant to the query.
+2. Define clear criteria for comparison (e.g., cost, efficiency, risk, longevity).
+3. Evaluate each option against these criteria using the research findings.
+4. Highlight trade-offs and "best for X" scenarios.
 
+Provide a JSON response:
 {{
-    "summary": "Overview of options and comparison approach",
+    "summary": "Overview of the competitive landscape.",
     "options_identified": [
         {{
-            "option": "Option name",
+            "option": "Name of option",
             "description": "Brief description",
-            "pros": ["Advantage 1", "Advantage 2"],
-            "cons": ["Disadvantage 1", "Disadvantage 2"],
-            "score": 0.8
+            "pros": ["Pro 1", "Pro 2"],
+            "cons": ["Con 1", "Con 2"],
+            "score": 0.0-1.0 (overall suitability)
         }}
     ],
     "comparison_criteria": [
-        "Criteria 1 (e.g., cost, quality, ease of use)",
-        "Criteria 2"
+        "Criterion 1",
+        "Criterion 2"
     ],
     "comparison_matrix": {{
-        "Option 1": {{"criteria_1": 8, "criteria_2": 6}},
-        "Option 2": {{"criteria_1": 6, "criteria_2": 9}}
+        "Option 1": {{"Criterion 1": 8, "Criterion 2": 6}},
+        "Option 2": {{"Criterion 1": 6, "Criterion 2": 9}}
     }},
     "standout_recommendations": [
-        "Top option for specific use case",
-        "Best value option"
+        "Option A is best for budget-conscious users",
+        "Option B is the performance leader"
     ]
-}}
-
-Provide objective, data-driven comparisons."""
+}}"""
     
     def _build_stage_5_prompt(self, query: str, all_findings: List[Dict]) -> str:
         """Build prompt for Stage 5: Synthesis."""
-        return f"""You are synthesizing all research findings to create coherent insights for:
+        return f"""You are a lead strategist. Your goal is to synthesize scattered findings into a coherent narrative.
 
 QUERY: {query}
 
-Please integrate all previous research into a comprehensive synthesis in JSON format:
+Task:
+1. Integrate findings from all previous stages.
+2. Identify cross-cutting patterns, trends, and causal relationships.
+3. Resolve any remaining conflicts in the data.
+4. Assess the overall strength of the conclusion we are building towards.
 
+Provide a JSON response:
 {{
-    "summary": "Executive summary of all research",
+    "summary": "A powerful synthesis of the entire research journey.",
     "key_insights": [
-        "Major insight 1 from combined research",
-        "Major insight 2"
+        "Deep insight 1 (connecting multiple facts)",
+        "Deep insight 2"
     ],
     "patterns_identified": [
-        "Pattern or trend discovered",
-        "Relationship between factors"
+        "Trend X is accelerating",
+        "Correlation between A and B"
     ],
     "confidence_assessment": {{
-        "overall_confidence": 0.85,
-        "high_confidence_areas": ["Well-researched area 1"],
-        "low_confidence_areas": ["Area needing more research"]
+        "overall_confidence": 0.0-1.0,
+        "high_confidence_areas": ["Areas where evidence is solid"],
+        "low_confidence_areas": ["Areas where we are speculating"]
     }},
     "decision_factors": [
         {{
-            "factor": "Important decision factor",
-            "importance": "high",
-            "evidence_strength": "strong"
+            "factor": "Critical variable",
+            "importance": "high/medium/low",
+            "evidence_strength": "strong/weak"
         }}
     ]
-}}
-
-Focus on creating a coherent, actionable synthesis of all research."""
+}}"""
     
     def _build_stage_6_prompt(self, query: str, all_findings: List[Dict], context: Dict[str, Any]) -> str:
         """Build prompt for Stage 6: Final Conclusions."""
@@ -545,50 +566,54 @@ Constraints: {json.dumps(constraints, indent=2)}
 Preferences: {json.dumps(preferences, indent=2)}
 """
         
-        return f"""You are providing final conclusions and recommendations for:
+        return f"""You are the final authority on this research project. Your goal is to provide a definitive answer and actionable roadmap.
 
 QUERY: {query}
 {personalization}
 
-Based on all 5 stages of research, provide final conclusions in JSON format:
+Task:
+1. Provide a direct answer to the user's core question.
+2. Make specific, prioritized recommendations.
+3. Create a step-by-step implementation plan.
+4. Anticipate risks and provide mitigation strategies.
+5. Define what "success" looks like.
 
+Provide a JSON response:
 {{
-    "summary": "Final executive summary with clear conclusion",
-    "primary_recommendation": "Top recommendation with reasoning",
+    "summary": "The final verdict. Clear, concise, and authoritative.",
+    "primary_recommendation": "The single best course of action.",
     "recommendations": [
         {{
-            "recommendation": "Specific recommendation",
+            "recommendation": "Actionable advice",
             "reasoning": "Why this is recommended",
-            "priority": "high",
-            "confidence": 0.9
+            "priority": "high/medium/low",
+            "confidence": 0.0-1.0
         }}
     ],
     "implementation_plan": [
         {{
             "step": "Step 1",
-            "description": "What to do",
-            "timeline": "When to do it"
+            "description": "Actionable instruction",
+            "timeline": "Estimated time"
         }}
     ],
     "risk_assessment": [
         {{
-            "risk": "Potential risk",
-            "likelihood": "medium",
-            "impact": "low",
-            "mitigation": "How to mitigate"
+            "risk": "Potential pitfall",
+            "likelihood": "high/medium/low",
+            "impact": "high/medium/low",
+            "mitigation": "How to avoid or fix it"
         }}
     ],
     "success_metrics": [
-        "How to measure success",
-        "Key indicators to track"
+        "Metric 1 to track",
+        "Metric 2 to track"
     ],
     "confidence_factors": [
-        "Factor supporting high confidence",
-        "Area of uncertainty"
+        "Why we are confident in this result",
+        "Where caution is needed"
     ]
-}}
-
-Provide clear, actionable, personalized recommendations."""
+}}"""
     
     def _parse_information_gathering_response(self, response: str) -> Dict[str, Any]:
         """Parse Stage 1 response into structured data."""

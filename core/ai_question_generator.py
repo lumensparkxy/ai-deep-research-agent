@@ -346,29 +346,29 @@ class AIQuestionGenerator:
         """Create prompt for intent analysis."""
         context_str = json.dumps(context, indent=2) if context else "None"
         
-        return f"""Analyze the user's intent and context from their query:
+        return f"""You are an expert intent analyst. Analyze the user's request to understand their core goals, implicit needs, and the context of their inquiry.
 
 USER QUERY: {user_query}
 EXISTING CONTEXT: {context_str}
 
-Analyze and respond with JSON containing:
-1. primary_intent: one of [research, purchase, learning, comparison, troubleshooting, recommendation, exploration]
-2. confidence: 0.0-1.0 confidence in intent classification
-3. context_keywords: list of key terms that indicate intent
-4. domain: the subject domain (e.g., "technology", "health", "finance")
-5. urgency_level: 0.0-1.0 how urgent the request seems
-6. specificity_level: 0.0-1.0 how specific vs. general the request is
-7. reasoning: brief explanation of the analysis
+Analyze the query and respond with a JSON object containing:
+1. primary_intent: The most likely intent from [research, purchase, learning, comparison, troubleshooting, recommendation, exploration].
+2. confidence: A float (0.0-1.0) representing your confidence in this classification.
+3. context_keywords: A list of key terms and entities extracted from the query.
+4. domain: The specific subject domain (e.g., "enterprise software", "clinical health", "personal finance"). Be specific.
+5. urgency_level: A float (0.0-1.0) indicating time sensitivity.
+6. specificity_level: A float (0.0-1.0) indicating how well-defined the request is.
+7. reasoning: A concise explanation of why you classified it this way, noting any ambiguity.
 
 Example response:
 {{
   "primary_intent": "purchase",
-  "confidence": 0.85,
-  "context_keywords": ["best", "laptop", "programming", "budget"],
-  "domain": "technology",
-  "urgency_level": 0.3,
-  "specificity_level": 0.7,
-  "reasoning": "User is looking to purchase a laptop with specific requirements for programming"
+  "confidence": 0.92,
+  "context_keywords": ["gaming laptop", "RTX 4080", "thermal performance", "under $2500"],
+  "domain": "consumer_electronics",
+  "urgency_level": 0.4,
+  "specificity_level": 0.85,
+  "reasoning": "User mentions specific GPU model and price constraint, indicating a clear purchase intent with technical requirements."
 }}"""
     
     def _create_question_generation_prompt(
@@ -382,7 +382,7 @@ Example response:
         context_summary = self._extract_context_summary(conversation_state)
         focus_str = ", ".join(focus_areas) if focus_areas else "general personalization"
         
-        return f"""Generate {max_questions} follow-up questions for a personalization conversation:
+        return f"""You are a skilled researcher and consultant. Your goal is to ask high-value follow-up questions that clarify the user's needs and drive the conversation forward.
 
 USER QUERY: {conversation_state.user_query}
 INTENT: {intent_analysis.primary_intent.value} (confidence: {intent_analysis.confidence:.2f})
@@ -390,34 +390,34 @@ DOMAIN: {intent_analysis.domain}
 EXISTING INFO: {json.dumps(context_summary, indent=2)}
 FOCUS AREAS: {focus_str}
 
-Generate questions that:
-1. Gather missing information for better personalization
-2. Are natural and conversational
-3. Match the user's intent and domain
-4. Avoid repeating information already gathered
-5. Progress the conversation toward actionable insights
+Guidelines:
+1. **Prioritize Information Value**: Ask questions that will significantly narrow down the search space or clarify ambiguous requirements.
+2. **Be Conversational**: Use a natural, professional tone. Avoid robotic phrasing.
+3. **Avoid Redundancy**: Do NOT ask for information that is already known or implied in the 'EXISTING INFO'.
+4. **Contextual Relevance**: Ensure questions are directly relevant to the user's specific domain and intent.
+5. **Progressive Depth**: If basic info is known, ask deeper, second-order questions (e.g., instead of "What is your budget?", ask "Is your budget flexible for higher performance?").
 
-Respond with JSON array of questions, each containing:
-- question: the actual question text
-- question_type: one of [open_ended, multiple_choice, scale, boolean, clarification, follow_up]
-- category: information category (budget, timeline, preferences, constraints, etc.)
-- priority: 0.0-1.0 importance score
-- context_relevance: 0.0-1.0 relevance to current context
-- expected_answer_type: text, choice, scale, or boolean
-- follow_up_potential: 0.0-1.0 likelihood to lead to more questions
-- reasoning: why this question is valuable
+Generate {max_questions} questions in a JSON array. Each object must contain:
+- question: The question text.
+- question_type: [open_ended, multiple_choice, scale, boolean, clarification, follow_up]
+- category: The information category (budget, timeline, preferences, constraints, etc.)
+- priority: 0.0-1.0 score indicating importance.
+- context_relevance: 0.0-1.0 score.
+- expected_answer_type: [text, choice, scale, boolean]
+- follow_up_potential: 0.0-1.0 score.
+- reasoning: Brief explanation of why this question is necessary.
 
 Example:
 [
   {{
-    "question": "What's your budget range for this purchase?",
-    "question_type": "open_ended",
-    "category": "budget",
-    "priority": 0.9,
-    "context_relevance": 0.95,
-    "expected_answer_type": "text",
-    "follow_up_potential": 0.7,
-    "reasoning": "Budget is critical for making relevant recommendations"
+    "question": "You mentioned video editing; do you primarily work with 4K footage or standard HD?",
+    "question_type": "multiple_choice",
+    "category": "usage_requirements",
+    "priority": 0.95,
+    "context_relevance": 0.98,
+    "expected_answer_type": "choice",
+    "follow_up_potential": 0.6,
+    "reasoning": "Clarifying resolution workflow is critical for determining CPU/GPU requirements."
   }}
 ]"""
     

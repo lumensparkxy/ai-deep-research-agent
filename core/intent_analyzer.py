@@ -98,34 +98,23 @@ ADDITIONAL CONTEXT:
 """
         
         prompt = f"""
-You are an expert consultant analyzing a user's research query to understand their deeper intent and context.
+You are an expert strategic consultant analyzing a user's research query. Your goal is to decode the user's request to understand their deeper intent, context, and the optimal strategy to assist them.
 
 USER QUERY: "{query}"
 {context_info}
 
-Analyze this query to understand:
+Perform a deep analysis of this query covering the following dimensions:
 
-1. CORE INTENT: What is the user really trying to achieve? Look beyond the surface request.
+1. **CORE INTENT**: What is the user's fundamental objective? (e.g., "Making a high-stakes purchase decision", "Learning a new complex skill", "Solving a critical technical error"). Look beyond the surface words.
+2. **DECISION CONTEXT**: What is the likely scenario? (e.g., "Corporate procurement", "Personal hobby project", "Academic research").
+3. **IMPLICIT NEEDS**: What does the user need that they haven't explicitly asked for? (e.g., "Needs validation of assumptions", "Needs a roadmap, not just a list").
+4. **EMOTIONAL STATE**: Detect signals of urgency, frustration, curiosity, or caution.
+5. **COMPLEXITY & SCOPE**: Assess the depth required. Is this a quick fact-check or a multi-faceted research project?
+6. **STAKEHOLDERS**: Who else might be influenced by this result?
+7. **CONVERSATION STRATEGY**: Define the persona and approach (e.g., "Authoritative and concise", "Exploratory and supportive").
+8. **KEY INFORMATION GAPS**: What are the top 3 most critical missing pieces of information?
 
-2. DECISION CONTEXT: What kind of decision or situation is driving this query? 
-
-3. EMOTIONAL UNDERTONES: What emotional signals do you detect? (urgency, anxiety, excitement, confusion, etc.)
-
-4. STAKEHOLDER IMPLICATIONS: Who might be affected by or involved in this decision?
-
-5. COMPLEXITY ASSESSMENT: How complex is this likely to be? What makes it complex or simple?
-
-6. CONVERSATION STRATEGY: How should we approach the conversation to best help this user?
-
-7. QUESTION FOCUS AREAS: What are the most important areas to explore through questions?
-
-8. SUCCESS CRITERIA: What would make this research truly valuable for the user?
-
-9. POTENTIAL CHALLENGES: What obstacles or complications might arise?
-
-10. CONTEXTUAL INSIGHTS: Any other important context that would guide the conversation?
-
-Provide your analysis in a natural, consultative tone. Focus on actionable insights that will guide an intelligent conversation.
+Provide your analysis in a structured, professional, and consultative tone.
 
 ANALYSIS:
 """
@@ -136,27 +125,29 @@ ANALYSIS:
         try:
             # Use AI to extract structured data from the analysis
             extraction_prompt = f"""
-Extract key insights from this intent analysis and format as JSON:
+You are a data extraction specialist. Extract key insights from the following intent analysis and format them into a precise JSON object.
 
 ANALYSIS:
 {analysis}
 
-Extract these insights as JSON:
+Output JSON format:
 {{
     "key_insights": {{
-        "core_intent": "what user really wants to achieve",
-        "decision_context": "type of decision/situation", 
-        "emotional_undertones": "detected emotions/urgency",
-        "stakeholder_implications": "who else is involved",
-        "potential_challenges": "obstacles or complications"
+        "core_intent": "Concise statement of the user's goal",
+        "decision_context": "The scenario or environment", 
+        "emotional_undertones": "Detected emotions",
+        "implicit_needs": "Needs not explicitly stated",
+        "stakeholder_implications": "Who is affected",
+        "potential_challenges": "Likely obstacles"
     }},
-    "conversation_strategy": "recommended approach (conversational/analytical/supportive/etc)",
-    "question_focus_areas": ["area1", "area2", "area3"],
-    "estimated_complexity": "simple/moderate/complex/critical",
-    "confidence_level": 0.8,
-    "contextual_notes": "additional important context"
+    "conversation_strategy": "Recommended tone and approach",
+    "question_focus_areas": ["Specific Area 1", "Specific Area 2", "Specific Area 3"],
+    "estimated_complexity": "One of: [simple, moderate, complex, critical]",
+    "confidence_level": 0.0 to 1.0,
+    "contextual_notes": "Any other crucial context"
 }}
 
+Ensure the JSON is valid and strictly follows the structure.
 JSON:
 """
             
@@ -201,24 +192,20 @@ JSON:
         """Generate AI-powered conversation opener based on intent insights"""
         try:
             opener_prompt = f"""
-Based on this intent analysis, generate a natural conversation opener that shows understanding and begins the personalization process.
+You are an intelligent research assistant. Based on the following intent analysis, generate a natural, engaging conversation opener.
 
 INTENT ANALYSIS:
 {insights.raw_analysis}
 
 KEY INSIGHTS:
 - Core Intent: {insights.get_insight('core_intent')}
-- Decision Context: {insights.get_insight('decision_context')}
-- Complexity: {insights.estimated_complexity}
 - Strategy: {insights.conversation_strategy}
 
-Generate a conversation opener that:
-1. Shows you understand their deeper intent
-2. Feels consultative and professional
-3. Naturally leads to the first question
-4. Sets the right tone for the conversation
-
-Keep it conversational, not robotic. Make them feel understood.
+Your Goal:
+1. Acknowledge the user's goal to show you understand.
+2. Adopt the recommended conversation strategy/tone.
+3. Transition smoothly into the first phase of information gathering.
+4. Keep it concise (under 50 words) and professional.
 
 OPENER:
 """
@@ -234,16 +221,21 @@ OPENER:
         """Update intent insights based on user response"""
         try:
             update_prompt = f"""
-Update your understanding based on this new information:
+You are refining your understanding of a user's intent. Update the original analysis based on their latest response.
 
 ORIGINAL ANALYSIS:
 {insights.raw_analysis}
 
-NEW INFORMATION:
+NEW INTERACTION:
 Question: {question}
 Answer: {answer}
 
-Provide an updated analysis that incorporates this new information. What new insights emerge? What should we focus on next?
+Task:
+1. Evaluate how the new answer changes or confirms the original analysis.
+2. Identify any new constraints, preferences, or goals revealed.
+3. Adjust the complexity assessment or conversation strategy if needed.
+
+Provide a concise updated analysis.
 
 UPDATED ANALYSIS:
 """

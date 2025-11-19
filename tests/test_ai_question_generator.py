@@ -63,7 +63,10 @@ class TestAIQuestionGenerator:
             "reasoning": "User wants to purchase a laptop for programming"
         }
         '''
-        client.generate_content = AsyncMock(return_value=mock_response)
+        # Mock the new google-genai client structure
+        client.aio = Mock()
+        client.aio.models = Mock()
+        client.aio.models.generate_content = AsyncMock(return_value=mock_response)
         return client
     
     @pytest.fixture
@@ -131,10 +134,12 @@ class TestAIQuestionGenerator:
         assert generator.min_question_priority == 0.3
     
     @pytest.mark.asyncio
-    async def test_generate_questions_with_ai(self, question_generator, sample_conversation_state):
+    async def test_generate_questions_with_ai(self, mock_gemini_client_async, sample_conversation_state):
         """Test question generation with AI client."""
+        generator = AIQuestionGenerator(gemini_client=mock_gemini_client_async)
+        
         # Mock the question generation response
-        question_generator.gemini_client.generate_content.side_effect = [
+        mock_gemini_client_async.aio.models.generate_content.side_effect = [
             # Intent analysis response
             Mock(text='''
             {
@@ -164,7 +169,7 @@ class TestAIQuestionGenerator:
             ''')
         ]
         
-        result = await question_generator.generate_questions(sample_conversation_state)
+        result = await generator.generate_questions(sample_conversation_state)
         
         assert isinstance(result, QuestionGenerationResult)
         assert len(result.questions) >= 1
@@ -341,7 +346,7 @@ class TestAIQuestionGenerator:
         generator = AIQuestionGenerator(gemini_client=mock_gemini_client_async)
         
         # Mock failures then success
-        mock_gemini_client_async.generate_content.side_effect = [
+        mock_gemini_client_async.aio.models.generate_content.side_effect = [
             Exception("API Error 1"),
             Exception("API Error 2"),
             Mock(text='{"test": "response"}')
@@ -351,7 +356,7 @@ class TestAIQuestionGenerator:
         response = await generator._query_gemini_with_retry(prompt)
         
         assert response.text == '{"test": "response"}'
-        assert mock_gemini_client_async.generate_content.call_count == 3
+        assert mock_gemini_client_async.aio.models.generate_content.call_count == 3
     
     @pytest.mark.asyncio
     async def test_api_retry_exhaustion(self, mock_gemini_client_async):
@@ -359,13 +364,13 @@ class TestAIQuestionGenerator:
         generator = AIQuestionGenerator(gemini_client=mock_gemini_client_async)
         
         # Mock all failures
-        mock_gemini_client_async.generate_content.side_effect = Exception("Persistent API Error")
+        mock_gemini_client_async.aio.models.generate_content.side_effect = Exception("Persistent API Error")
         
         prompt = "test prompt"
         with pytest.raises(Exception, match="Persistent API Error"):
             await generator._query_gemini_with_retry(prompt)
         
-        assert mock_gemini_client_async.generate_content.call_count == generator.api_retry_attempts
+        assert mock_gemini_client_async.aio.models.generate_content.call_count == generator.api_retry_attempts
     
     def test_cache_functionality(self, question_generator_no_ai):
         """Test response caching functionality."""
