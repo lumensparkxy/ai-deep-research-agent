@@ -295,18 +295,25 @@ class TestSettings:
     
     def test_environment_overrides(self):
         """Test environment-specific setting overrides."""
-        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key"}, clear=True):
+        # Test with a non-existent environment (should return None)
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "ENVIRONMENT": "test_env"}, clear=True):
             settings = Settings()
             
             # Test getting environment override (should return None for non-existent setting)
             override = settings.get_environment_override("dynamic_personalization.max_questions")
-            assert override is None  # Production environment doesn't override this in test config
+            assert override is None
             
             # Test with default value
             override_with_default = settings.get_environment_override(
                 "nonexistent.setting", default="default_value"
             )
             assert override_with_default == "default_value"
+
+        # Test with development environment which HAS overrides
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "ENVIRONMENT": "development"}, clear=True):
+            settings = Settings()
+            override = settings.get_environment_override("dynamic_personalization.max_questions")
+            assert override == 5
     
     def test_user_preferences_directory_creation(self, temp_dir):
         """Test that user preferences directory is created."""

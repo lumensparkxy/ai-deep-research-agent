@@ -9,6 +9,7 @@ from unittest.mock import patch, Mock, MagicMock
 
 from core.research_engine import ResearchEngine
 from utils.validators import ValidationError
+from core.exceptions import GeminiAPIError
 
 
 class TestResearchEngineErrorHandling:
@@ -37,7 +38,7 @@ class TestResearchEngineErrorHandling:
             # Mock API failure during research
             mock_client.models.generate_content.side_effect = Exception("API Rate Limit")
             
-            with pytest.raises(ValidationError, match="Gemini API failed"):
+            with pytest.raises(GeminiAPIError, match="Gemini API failed"):
                 engine._call_gemini_with_retry("test query", max_retries=1)
     
     def test_research_engine_empty_response_handling(self, mock_settings):
@@ -54,7 +55,7 @@ class TestResearchEngineErrorHandling:
             mock_response.text = ""
             mock_client.models.generate_content.return_value = mock_response
             
-            with pytest.raises(ValidationError, match="Empty response from Gemini"):
+            with pytest.raises(GeminiAPIError, match="Empty response from Gemini"):
                 engine._call_gemini_with_retry("test query")
     
     def test_research_engine_session_management_failure(self, mock_settings):
@@ -151,7 +152,7 @@ class TestResearchEngineErrorHandling:
             import socket
             mock_client.models.generate_content.side_effect = socket.timeout("Network timeout")
             
-            with pytest.raises(ValidationError, match="Gemini API failed"):
+            with pytest.raises(GeminiAPIError, match="Gemini API failed"):
                 engine._call_gemini_with_retry("test query", max_retries=1)
     
     def test_research_engine_memory_management(self, mock_settings):

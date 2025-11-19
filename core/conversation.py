@@ -8,6 +8,12 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+from rich.prompt import Prompt, Confirm
+from rich.progress import Progress, SpinnerColumn, TextColumn
+
 from config.settings import Settings
 from utils.session_manager import SessionManager
 from utils.validators import InputValidator, ValidationError
@@ -35,6 +41,7 @@ class ConversationHandler:
         self.session_manager = SessionManager(settings)
         self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
+        self.console = Console()
         
         # Initialize Dynamic Personalization Engine
         try:
@@ -94,8 +101,8 @@ class ConversationHandler:
                 # This might happen in tests or other contexts
                 pass
             
-            print(f"\n🔬 Starting Research Session: {session_id}")
-            print("=" * 60)
+            self.console.print(f"\n[bold blue]🔬 Starting Research Session:[/bold blue] {session_id}")
+            self.console.rule()
             
             # Import here to avoid circular imports when modules are being created
             try:
@@ -106,8 +113,8 @@ class ConversationHandler:
                 research_engine = ResearchEngine(self.settings)
                 
                 # Show research start message
-                print(f"\n🔬 Starting Iterative Research Process for: '{query}'")
-                print("=" * 60)
+                self.console.print(f"\n[bold green]🔬 Starting Iterative Research Process for:[/bold green] '{query}'")
+                self.console.rule()
                 
                 research_results = research_engine.conduct_research(
                     query, context, session_id
@@ -119,9 +126,10 @@ class ConversationHandler:
                 # Ask for report depth
                 depth = self._ask_report_depth()
                 
-                report_path = report_generator.generate_report(
-                    self.current_session, research_results, depth
-                )
+                with self.console.status("[bold green]Generating report...[/bold green]", spinner="dots"):
+                    report_path = report_generator.generate_report(
+                        self.current_session, research_results, depth
+                    )
                 
                 # Update session with report path
                 self.session_manager.update_session_report_path(session_id, report_path)
@@ -138,11 +146,11 @@ class ConversationHandler:
                 
             except ImportError:
                 # Modules not yet created - show placeholder message
-                print("🚧 Core research modules are being implemented...")
-                print("This is the foundation setup. Research functionality will be available soon!")
-                print(f"\nSession created: {session_id}")
-                print(f"Query: {query}")
-                print(f"Context: {context}")
+                self.console.print("[yellow]🚧 Core research modules are being implemented...[/yellow]")
+                self.console.print("This is the foundation setup. Research functionality will be available soon!")
+                self.console.print(f"\nSession created: {session_id}")
+                self.console.print(f"Query: {query}")
+                self.console.print(f"Context: {context}")
                 
                 # Clear session tracking as foundation mode completed
                 try:
@@ -159,7 +167,7 @@ class ConversationHandler:
                 clear_current_session()
             except ImportError:
                 pass
-            print("\n\n👋 Research session cancelled. Goodbye!")
+            self.console.print("\n\n[bold red]👋 Research session cancelled. Goodbye![/bold red]")
         except Exception as e:
             # Clear session tracking on error
             try:
@@ -168,45 +176,48 @@ class ConversationHandler:
             except ImportError:
                 pass
             self.logger.error(f"Error in interactive session: {e}")
-            print(f"\n❌ An error occurred: {e}")
-            print("The session has been saved and can be resumed later.")
+            self.console.print(f"\n[bold red]❌ An error occurred:[/bold red] {e}")
+            self.console.print("The session has been saved and can be resumed later.")
     
     def _print_welcome(self) -> None:
         """Print welcome message and instructions."""
-        print("🤖 Welcome to Deep Research Agent!")
-        print("\nI'll help you make informed decisions through comprehensive research.")
-        print("I can assist with any topic: health, finance, technology, lifestyle, and more.")
-        print("\nLet's start by understanding what you need help with...")
-        print()
+        welcome_text = """
+[bold cyan]Welcome to Deep Research Agent![/bold cyan]
+
+I'll help you make informed decisions through comprehensive research.
+I can assist with any topic: health, finance, technology, lifestyle, and more.
+
+Let's start by understanding what you need help with...
+"""
+        self.console.print(Panel(welcome_text.strip(), title="🤖 Deep Research Agent", border_style="blue"))
+        self.console.print()
     
     def _get_research_query(self) -> str:
         """Get and validate the research query from user."""
         while True:
             try:
-                print("💭 What decision do you need help with today?")
-                print("   (Example: 'Best smartphone under $500 for photography')")
-                print()
+                self.console.print("[bold]💭 What decision do you need help with today?[/bold]")
+                self.console.print("   (Example: 'Best smartphone under $500 for photography')")
+                self.console.print()
                 
-                query = input("Your question: ").strip()
+                query = Prompt.ask("Your question").strip()
                 
                 if not query:
-                    print("Please enter a research question.\n")
+                    self.console.print("[yellow]Please enter a research question.[/yellow]\n")
                     continue
                 
                 # Validate query
                 validated_query = self.validator.validate_query(query)
                 
                 # Confirm query understanding
-                print(f"\n📝 I understand you want to research: '{validated_query}'")
-                confirm = input("Is this correct? (y/n): ").strip().lower()
-                
-                if confirm in ['y', 'yes', '']:
+                self.console.print(f"\n[bold]📝 I understand you want to research:[/bold] '{validated_query}'")
+                if Confirm.ask("Is this correct?"):
                     return validated_query
                 
-                print("Let's try again...\n")
+                self.console.print("Let's try again...\n")
                 
             except ValidationError as e:
-                print(f"❌ {e}\n")
+                self.console.print(f"[red]❌ {e}[/red]\n")
             except (KeyboardInterrupt, EOFError):
                 raise
     
@@ -214,19 +225,12 @@ class ConversationHandler:
         """Ask if user wants personalized recommendations."""
         while True:
             try:
-                print("\n🎯 Should I personalize recommendations based on your profile?")
-                print("   This helps me provide more relevant and actionable advice.")
-                print("   (All information is stored locally and private)")
-                print()
+                self.console.print("\n[bold]🎯 Should I personalize recommendations based on your profile?[/bold]")
+                self.console.print("   This helps me provide more relevant and actionable advice.")
+                self.console.print("   (All information is stored locally and private)")
+                self.console.print()
                 
-                response = input("Personalize recommendations? (y/n): ").strip().lower()
-                
-                if response in ['y', 'yes', '']:
-                    return True
-                elif response in ['n', 'no']:
-                    return False
-                else:
-                    print("Please answer 'y' for yes or 'n' for no.\n")
+                return Confirm.ask("Personalize recommendations?")
                     
             except (KeyboardInterrupt, EOFError):
                 raise
@@ -246,18 +250,19 @@ class ConversationHandler:
             # Fallback to static questions if AI engines not available
             return self._gather_static_personalization(query)
         
-        print("\n🤖 Let me ask you some intelligent questions to personalize your research:")
-        print("   I'll adapt my questions based on your responses for better recommendations.")
-        print()
+        self.console.print("\n[bold]🤖 Let me ask you some intelligent questions to personalize your research:[/bold]")
+        self.console.print("   I'll adapt my questions based on your responses for better recommendations.")
+        self.console.print()
         
         try:
             # Analyze user signals to determine optimal conversation mode
-            user_signals = self.mode_intelligence.analyze_user_signals(query)
-            mode_recommendation = self.mode_intelligence.recommend_conversation_mode(user_signals)
+            with self.console.status("[cyan]Analyzing research needs...[/cyan]", spinner="dots"):
+                user_signals = self.mode_intelligence.analyze_user_signals(query)
+                mode_recommendation = self.mode_intelligence.recommend_conversation_mode(user_signals)
             
-            print(f"🎯 Detected conversation style: {mode_recommendation.recommended_mode.value.title()} Mode")
-            print(f"   {mode_recommendation.reasoning}")
-            print()
+            self.console.print(f"[bold green]🎯 Detected conversation style:[/bold green] {mode_recommendation.recommended_mode.value.title()} Mode")
+            self.console.print(f"   {mode_recommendation.reasoning}")
+            self.console.print()
             
             # Initialize dynamic conversation with mode intelligence
             session_id = temp_session_id or f"personalization_{int(datetime.now().timestamp() * 1000)}"
@@ -277,7 +282,7 @@ class ConversationHandler:
             response_times = []
             question_count = 0
             
-            print(f"📋 I'll ask up to {max_questions} questions to understand your needs:")
+            self.console.print(f"📋 I'll ask up to {max_questions} questions to understand your needs:")
             
             while question_count < max_questions:
                 # Generate next intelligent question with mode-specific prompting
@@ -290,26 +295,27 @@ class ConversationHandler:
                 # Apply mode-specific prompt
                 mode_prompt = self.mode_intelligence.create_mode_specific_prompt(current_mode, mode_context)
                 
-                question = self.personalization_engine.generate_next_question(
-                    conversation_state, 
-                    additional_context=mode_prompt
-                )
+                with self.console.status("[cyan]Thinking...[/cyan]", spinner="dots"):
+                    question = self.personalization_engine.generate_next_question(
+                        conversation_state, 
+                        additional_context=mode_prompt
+                    )
                 
                 if not question:
-                    print("✅ I have enough information to provide personalized recommendations!")
+                    self.console.print("[bold green]✅ I have enough information to provide personalized recommendations![/bold green]")
                     break
                 
                 # Ask the question with mode-appropriate formatting
                 question_prefix = self._get_mode_question_prefix(current_mode, question_count + 1, max_questions)
-                print(f"\n{question_prefix}")
+                self.console.print(f"\n[bold]{question_prefix}[/bold]")
                 
                 try:
                     start_time = datetime.now()
-                    response = input(f"{question}\n➤ ").strip()
+                    response = Prompt.ask(question).strip()
                     response_time = (datetime.now() - start_time).total_seconds()
                     
                     if not response:
-                        print("   (Skipped)")
+                        self.console.print("   (Skipped)")
                         question_count += 1
                         continue
                     
@@ -318,9 +324,10 @@ class ConversationHandler:
                     response_times.append(response_time)
                     
                     # Process the response
-                    result = self.personalization_engine.process_user_response(
-                        conversation_state, question, response
-                    )
+                    with self.console.status("[cyan]Processing...[/cyan]", spinner="dots"):
+                        result = self.personalization_engine.process_user_response(
+                            conversation_state, question, response
+                        )
                     
                     # Monitor engagement and check for mode switching
                     if question_count >= 2:  # Need some history for engagement analysis
@@ -342,22 +349,22 @@ class ConversationHandler:
                                 )
                                 
                                 if transition.user_notification:
-                                    print(f"\n🔄 {transition.transition_message}")
+                                    self.console.print(f"\n[yellow]🔄 {transition.transition_message}[/yellow]")
                                 
                                 current_mode = new_mode
                                 max_questions = transition.new_questioning_depth
                                 
-                                print(f"   Switching to {current_mode.value.title()} Mode ({max_questions} questions max)")
+                                self.console.print(f"   Switching to {current_mode.value.title()} Mode ({max_questions} questions max)")
                     
                     # Show brief acknowledgment based on mode
                     if result.get('extracted_info'):
                         acknowledgment = self._get_mode_acknowledgment(current_mode, question_count + 1)
-                        print(f"   {acknowledgment}")
+                        self.console.print(f"   [italic]{acknowledgment}[/italic]")
                     
                     question_count += 1
                     
                 except (KeyboardInterrupt, EOFError):
-                    print("\n   Personalization cancelled by user")
+                    self.console.print("\n   [yellow]Personalization cancelled by user[/yellow]")
                     break
             
             # Get conversation summary
@@ -378,7 +385,7 @@ class ConversationHandler:
             
         except Exception as e:
             self.logger.error(f"Error in dynamic personalization with mode intelligence: {e}")
-            print("🔄 Falling back to standard questions...")
+            self.console.print("[yellow]🔄 Falling back to standard questions...[/yellow]")
             return self._gather_static_personalization(query)
     
     def _convert_conversation_to_context(self, conversation_state, summary: Dict[str, Any]) -> Dict[str, Any]:
@@ -428,9 +435,9 @@ class ConversationHandler:
         Returns:
             Dictionary of personalization data
         """
-        print("\n📋 Let me gather some information to personalize recommendations:")
-        print("   (You can skip any question by pressing Enter)")
-        print()
+        self.console.print("\n[bold]📋 Let me gather some information to personalize recommendations:[/bold]")
+        self.console.print("   (You can skip any question by pressing Enter)")
+        self.console.print()
         
         # Classify query to determine relevant questions
         category = self._classify_query(query)
@@ -507,7 +514,7 @@ class ConversationHandler:
     def _ask_personalization_question(self, question: str) -> Optional[str]:
         """Ask a specific personalization question."""
         try:
-            response = input(f"{question.title()}: ").strip()
+            response = Prompt.ask(f"{question.title()}").strip()
             return response if response else None
         except (KeyboardInterrupt, EOFError):
             raise
@@ -515,7 +522,7 @@ class ConversationHandler:
     def _ask_optional(self, question: str) -> Optional[str]:
         """Ask an optional question."""
         try:
-            response = input(f"{question} (optional): ").strip()
+            response = Prompt.ask(f"{question} (optional)").strip()
             return response if response else None
         except (KeyboardInterrupt, EOFError):
             raise
@@ -524,22 +531,20 @@ class ConversationHandler:
         """Ask user for preferred report depth."""
         while True:
             try:
-                print("\n📊 Choose your report depth:")
-                print("   1. Quick (2-3 pages) - Key findings and top recommendations")
-                print("   2. Standard (5-7 pages) - Balanced detail with actionable insights") 
-                print("   3. Detailed (10+ pages) - Comprehensive analysis with methodology")
-                print()
+                self.console.print("\n[bold]📊 Choose your report depth:[/bold]")
+                self.console.print("   1. [cyan]Quick[/cyan] (2-3 pages) - Key findings and top recommendations")
+                self.console.print("   2. [cyan]Standard[/cyan] (5-7 pages) - Balanced detail with actionable insights") 
+                self.console.print("   3. [cyan]Detailed[/cyan] (10+ pages) - Comprehensive analysis with methodology")
+                self.console.print()
                 
-                choice = input("Report depth (1/2/3 or quick/standard/detailed): ").strip().lower()
+                choice = Prompt.ask("Report depth", choices=["1", "2", "3", "quick", "standard", "detailed", "q", "s", "d"], default="standard")
                 
                 if choice in ['1', 'quick', 'q']:
                     return 'quick'
-                elif choice in ['2', 'standard', 's', '']:
+                elif choice in ['2', 'standard', 's']:
                     return 'standard'
                 elif choice in ['3', 'detailed', 'd']:
                     return 'detailed'
-                else:
-                    print("Please choose 1, 2, or 3.\n")
                     
             except (KeyboardInterrupt, EOFError):
                 raise
@@ -579,16 +584,16 @@ class ConversationHandler:
     
     def _show_personalization_completion(self, mode: ConversationMode, count: int, context: Dict[str, Any]) -> None:
         """Show personalization completion summary."""
-        print("\n✅ Personalization Complete!")
-        print(f"   Mode used: {mode.value.title()}")
-        print(f"   Questions asked: {count}")
+        self.console.print("\n[bold green]✅ Personalization Complete![/bold green]")
+        self.console.print(f"   Mode used: {mode.value.title()}")
+        self.console.print(f"   Questions asked: {count}")
         
         insights = context.get('conversation_insights', {}).get('key_insights', [])
         if insights:
-            print("\n🔑 Key Insights Gathered:")
+            self.console.print("\n[bold]🔑 Key Insights Gathered:[/bold]")
             for insight in insights[:3]:
-                print(f"   • {insight}")
-        print()
+                self.console.print(f"   • {insight}")
+        self.console.print()
     
     def _show_completion_message(self, session_id: str, report_path: str, research_results: Dict[str, Any]) -> None:
         """
@@ -599,13 +604,13 @@ class ConversationHandler:
             report_path: Path to the generated report
             research_results: The results of the research
         """
-        print("\n✅ Research Session Completed Successfully!")
-        print("=" * 60)
-        print(f"🆔 Session ID: {session_id}")
-        print(f"📄 Report: {report_path}")
+        self.console.print("\n[bold green]✅ Research Session Completed Successfully![/bold green]")
+        self.console.rule()
+        self.console.print(f"🆔 Session ID: [cyan]{session_id}[/cyan]")
+        self.console.print(f"📄 Report: [blue]{report_path}[/blue]")
         
         confidence = research_results.get('confidence_score', 0.0)
-        print(f"🎯 Confidence Score: {confidence:.2f}")
+        self.console.print(f"🎯 Confidence Score: {confidence:.2f}")
         
-        print("\nYou can view the full report in the path above.")
-        print("Thank you for using Deep Research Agent!")
+        self.console.print("\nYou can view the full report in the path above.")
+        self.console.print("[italic]Thank you for using Deep Research Agent![/italic]")

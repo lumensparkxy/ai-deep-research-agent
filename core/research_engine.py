@@ -12,11 +12,20 @@ from datetime import datetime
 
 from google import genai
 from google.genai import types
+from rich.console import Console
+from rich.panel import Panel
 
 from config.settings import Settings
 from utils.session_manager import SessionManager
 from utils.validators import InputValidator, ValidationError
 from utils.cache_manager import CacheManager
+from core.models import (
+    ResearchResult, ResearchStageResult, KnowledgeBase,
+    Stage1Findings, Stage2Findings, Stage3Findings,
+    Stage4Findings, Stage5Findings, Stage6Findings
+)
+from core.prompts import PromptManager
+from core.exceptions import GeminiAPIError, ResearchStageError
 
 
 class ResearchEngine:
@@ -29,6 +38,8 @@ class ResearchEngine:
         self.validator = InputValidator(settings)
         self.logger = logging.getLogger(__name__)
         self.cache_manager = CacheManager(settings.cache_dir, settings.cache_enabled)
+        self.prompt_manager = PromptManager(settings)
+        self.console = Console()
         
         # Configure Gemini AI
         self._setup_gemini()
@@ -69,7 +80,7 @@ class ResearchEngine:
             session_id: Session identifier
             
         Returns:
-            Complete research results
+            Complete research results (as a dictionary for compatibility)
         """
         # Validate input query and create a new session to ensure proper session setup
         validated_query = self.validator.validate_query(query)
@@ -81,12 +92,15 @@ class ResearchEngine:
             raise
         self.logger.info(f"Starting 6-stage research for session {session_id}")
         
-        # Initialize research state
+        # Initialize research state using Pydantic model
+        research_result = ResearchResult()
+        
+        # Keep a local state for passing between stages (legacy support/ease of use)
         research_state = {
             "query": query,
             "context": context,
             "session_id": session_id,
-            "stages": [],
+            "stages": [], # Will be populated with dicts for compatibility
             "knowledge_base": {
                 "entities": [],
                 "relationships": [],
@@ -113,24 +127,23 @@ class ResearchEngine:
                 
                 try:
                     # Execute stage
-                    stage_result = stage_method(research_state)
+                    stage_findings = stage_method(research_state)
                     
-                    # Validate stage result
-                    if not isinstance(stage_result, dict):
-                        raise ValidationError(f"Stage {stage_num} returned invalid result")
+                    # Create stage result
+                    stage_result = ResearchStageResult(
+                        stage=stage_num,
+                        name=stage_name,
+                        findings=stage_findings["findings"]
+                    )
                     
-                    # Add stage metadata
-                    stage_result.update({
-                        "stage": stage_num,
-                        "name": stage_name,
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    # Add to result model
+                    research_result.stages.append(stage_result)
                     
-                    # Store stage result
-                    research_state["stages"].append(stage_result)
+                    # Update legacy state
+                    research_state["stages"].append(stage_result.model_dump())
                     
                     # Update session with stage progress
-                    self.session_manager.update_session_stage(session_id, stage_result)
+                    self.session_manager.update_session_stage(session_id, stage_result.model_dump())
                     
                     # Add small delay to respect rate limits
                     time.sleep(self.settings.rate_limit_delay)
@@ -138,33 +151,35 @@ class ResearchEngine:
                 except Exception as e:
                     self.logger.error(f"Error in Stage {stage_num}: {e}")
                     # Continue with degraded functionality
-                    fallback_result = {
-                        "stage": stage_num,
-                        "name": stage_name,
-                        "findings": {
+                    fallback_result = ResearchStageResult(
+                        stage=stage_num,
+                        name=stage_name,
+                        findings={
                             "summary": f"Stage {stage_num} encountered an error but research continues",
                             "evidence": [],
                             "gaps_identified": [f"Error in {stage_name}: {str(e)}"]
                         },
-                        "timestamp": datetime.now().isoformat(),
-                        "error": str(e)
-                    }
-                    research_state["stages"].append(fallback_result)
+                        error=str(e)
+                    )
+                    research_result.stages.append(fallback_result)
+                    research_state["stages"].append(fallback_result.model_dump())
             
             # Calculate overall confidence score
             confidence_score = self._calculate_confidence_score(research_state)
+            research_result.confidence_score = confidence_score
             
-            # Prepare final results
-            final_results = {
-                "stages": research_state["stages"],
-                "final_conclusions": research_state["stages"][-1]["findings"] if research_state["stages"] else {},
-                "confidence_score": confidence_score,
-                "knowledge_base": research_state["knowledge_base"]
-            }
+            # Set final conclusions
+            if research_result.stages:
+                last_stage = research_result.stages[-1]
+                # Convert findings to Stage6Findings if possible, or just use the dict
+                research_result.final_conclusions = last_stage.findings
+            
+            # Prepare final results dict
+            final_results = research_result.model_dump()
             
             # Update session with final results
             self.session_manager.update_session_conclusions(
-                session_id, final_results["final_conclusions"], confidence_score
+                session_id, final_results.get("final_conclusions", {}), confidence_score
             )
             
             self.logger.info(f"Research completed for session {session_id} with confidence {confidence_score:.2f}")
@@ -183,14 +198,15 @@ class ResearchEngine:
                 "confidence_score": self.settings.min_confidence_fallback,
                 "knowledge_base": research_state.get("knowledge_base", {})
             }
+
     
     def _stage_1_information_gathering(self, research_state: Dict[str, Any]) -> Dict[str, Any]:
         """Stage 1: Broad exploration and initial research."""
         query = research_state["query"]
         context = research_state["context"]
         
-        # Build context-aware prompt
-        prompt = self._build_stage_1_prompt(query, context)
+        # Build context-aware prompt using PromptManager
+        prompt = self.prompt_manager.get_stage_1_prompt(query, context)
         
         # Get AI response
         response = self._call_gemini_with_retry(prompt)
@@ -214,7 +230,7 @@ class ResearchEngine:
         """Stage 2: Validation and fact-checking."""
         previous_findings = research_state["stages"][-1]["findings"] if research_state["stages"] else {}
         
-        prompt = self._build_stage_2_prompt(research_state["query"], previous_findings)
+        prompt = self.prompt_manager.get_stage_2_prompt(research_state["query"], previous_findings)
         response = self._call_gemini_with_retry(prompt)
         findings = self._parse_validation_response(response)
         
@@ -231,7 +247,7 @@ class ResearchEngine:
         """Stage 3: Clarification and follow-up research."""
         gaps = research_state["gaps_identified"]
         
-        prompt = self._build_stage_3_prompt(research_state["query"], gaps)
+        prompt = self.prompt_manager.get_stage_3_prompt(research_state["query"], gaps)
         response = self._call_gemini_with_retry(prompt)
         findings = self._parse_clarification_response(response)
         
@@ -243,7 +259,7 @@ class ResearchEngine:
         """Stage 4: Systematic comparison of options."""
         all_findings = [stage["findings"] for stage in research_state["stages"]]
         
-        prompt = self._build_stage_4_prompt(research_state["query"], all_findings, research_state["context"])
+        prompt = self.prompt_manager.get_stage_4_prompt(research_state["query"], all_findings, research_state["context"])
         response = self._call_gemini_with_retry(prompt)
         findings = self._parse_comparative_analysis_response(response)
         
@@ -255,7 +271,7 @@ class ResearchEngine:
         """Stage 5: Synthesis and integration."""
         all_findings = [stage["findings"] for stage in research_state["stages"]]
         
-        prompt = self._build_stage_5_prompt(research_state["query"], all_findings)
+        prompt = self.prompt_manager.get_stage_5_prompt(research_state["query"], all_findings)
         response = self._call_gemini_with_retry(prompt)
         findings = self._parse_synthesis_response(response)
         
@@ -268,7 +284,7 @@ class ResearchEngine:
         all_findings = [stage["findings"] for stage in research_state["stages"]]
         context = research_state["context"]
         
-        prompt = self._build_stage_6_prompt(research_state["query"], all_findings, context)
+        prompt = self.prompt_manager.get_stage_6_prompt(research_state["query"], all_findings, context)
         response = self._call_gemini_with_retry(prompt)
         findings = self._parse_final_conclusions_response(response)
         
@@ -336,8 +352,8 @@ class ResearchEngine:
                     self.cache_manager.set(cache_key, response.text)
                     return response.text
                 # Empty response is a terminal validation error
-                raise ValidationError("Empty response from Gemini")
-            except ValidationError:
+                raise GeminiAPIError("Empty response from Gemini")
+            except GeminiAPIError:
                 # Propagate validation errors immediately
                 raise
             except Exception as e:
@@ -350,270 +366,9 @@ class ResearchEngine:
                 if attempt < max_retries - 1:
                     time.sleep(delay * (self.settings.exponential_backoff_base ** attempt))
                 else:
-                    raise ValidationError(f"Gemini API failed after {max_retries} attempts: {e}")
+                    raise GeminiAPIError(f"Gemini API failed after {max_retries} attempts: {e}")
     
-    def _build_stage_1_prompt(self, query: str, context: Dict[str, Any]) -> str:
-        """Build prompt for Stage 1: Information Gathering."""
-        context_str = ""
-        if context.get("personalize") and context.get("user_info"):
-            context_str = f"\nUser Context: {json.dumps(context['user_info'], indent=2)}"
-        
-        return f"""You are a senior research analyst conducting a comprehensive initial investigation.
-
-QUERY: {query}
-{context_str}
-
-Your goal is to gather a broad and deep foundation of information. Do not settle for surface-level facts.
-
-Task:
-1. Identify the core concepts and entities associated with the query.
-2. Gather key facts, statistics, and definitions.
-3. Search for diverse perspectives and potential controversies.
-4. Identify primary sources of authority in this domain.
-
-Provide a JSON response:
-{{
-    "summary": "A high-level executive summary of the initial landscape.",
-    "key_facts": [
-        "Fact 1 (with context)",
-        "Fact 2 (with context)"
-    ],
-    "evidence": [
-        {{
-            "source_description": "Specific report, study, or authority",
-            "reliability_score": 0.0-1.0,
-            "extracted_text": "Direct quote or specific data point",
-            "relevance_score": 0.0-1.0
-        }}
-    ],
-    "gaps_identified": [
-        "Specific missing data point 1",
-        "Unclear relationship between X and Y"
-    ],
-    "research_areas": [
-        "Sub-topic 1 to explore in depth",
-        "Sub-topic 2 to explore in depth"
-    ]
-}}"""
-    
-    def _build_stage_2_prompt(self, query: str, previous_findings: Dict[str, Any]) -> str:
-        """Build prompt for Stage 2: Validation."""
-        return f"""You are a rigorous fact-checker and auditor. Your job is to validate the initial research findings and challenge assumptions.
-
-QUERY: {query}
-
-INITIAL FINDINGS:
-{json.dumps(previous_findings, indent=2)}
-
-Task:
-1. Verify the accuracy of the key facts. Are they up-to-date? Are they from biased sources?
-2. Identify any logical inconsistencies or contradictions.
-3. Flag information that lacks sufficient evidence.
-4. Distinguish between objective facts and subjective opinions.
-
-Provide a JSON response:
-{{
-    "summary": "Assessment of the research validity so far.",
-    "validated_facts": [
-        "Fact 1 (Verified)",
-        "Fact 2 (Verified)"
-    ],
-    "questionable_information": [
-        "Claim X is disputed by Source Y",
-        "Statistic Z is outdated (from 2019)"
-    ],
-    "additional_gaps": [
-        "New gap discovered during verification"
-    ],
-    "reliability_assessment": {{
-        "overall_confidence": 0.0-1.0,
-        "strong_evidence": ["List of solid points"],
-        "weak_evidence": ["List of shaky points"]
-    }}
-}}"""
-    
-    def _build_stage_3_prompt(self, query: str, gaps: List[str]) -> str:
-        """Build prompt for Stage 3: Clarification."""
-        gaps_str = "\n".join([f"- {gap}" for gap in gaps[:self.settings.max_gaps_per_stage]])
-        
-        return f"""You are a targeted research specialist. Your goal is to close specific knowledge gaps.
-
-QUERY: {query}
-
-MISSING INFORMATION (GAPS):
-{gaps_str}
-
-Task:
-1. Conduct focused research to answer EACH specific gap.
-2. If a gap cannot be fully resolved, explain why (e.g., data unavailability).
-3. Look for niche or specialized sources that might hold these specific answers.
-
-Provide a JSON response:
-{{
-    "summary": "Progress report on filling knowledge gaps.",
-    "gap_responses": [
-        {{
-            "gap": "The specific gap being addressed",
-            "findings": "Detailed answer or explanation",
-            "confidence": 0.0-1.0
-        }}
-    ],
-    "additional_evidence": [
-        {{
-            "source_description": "Source used for this gap",
-            "reliability_score": 0.0-1.0,
-            "extracted_text": "Relevant excerpt",
-            "relevance_score": 0.0-1.0
-        }}
-    ],
-    "remaining_gaps": [
-        "Gaps that are still critical and unaddressed"
-    ]
-}}"""
-    
-    def _build_stage_4_prompt(self, query: str, all_findings: List[Dict], context: Dict[str, Any]) -> str:
-        """Build prompt for Stage 4: Comparative Analysis."""
-        context_str = ""
-        if context.get("constraints"):
-            context_str = f"\nUser Constraints: {json.dumps(context['constraints'], indent=2)}"
-        
-        return f"""You are a decision support analyst. Your goal is to systematically compare options to aid decision-making.
-
-QUERY: {query}
-{context_str}
-
-Task:
-1. Identify distinct options, solutions, or pathways relevant to the query.
-2. Define clear criteria for comparison (e.g., cost, efficiency, risk, longevity).
-3. Evaluate each option against these criteria using the research findings.
-4. Highlight trade-offs and "best for X" scenarios.
-
-Provide a JSON response:
-{{
-    "summary": "Overview of the competitive landscape.",
-    "options_identified": [
-        {{
-            "option": "Name of option",
-            "description": "Brief description",
-            "pros": ["Pro 1", "Pro 2"],
-            "cons": ["Con 1", "Con 2"],
-            "score": 0.0-1.0 (overall suitability)
-        }}
-    ],
-    "comparison_criteria": [
-        "Criterion 1",
-        "Criterion 2"
-    ],
-    "comparison_matrix": {{
-        "Option 1": {{"Criterion 1": 8, "Criterion 2": 6}},
-        "Option 2": {{"Criterion 1": 6, "Criterion 2": 9}}
-    }},
-    "standout_recommendations": [
-        "Option A is best for budget-conscious users",
-        "Option B is the performance leader"
-    ]
-}}"""
-    
-    def _build_stage_5_prompt(self, query: str, all_findings: List[Dict]) -> str:
-        """Build prompt for Stage 5: Synthesis."""
-        return f"""You are a lead strategist. Your goal is to synthesize scattered findings into a coherent narrative.
-
-QUERY: {query}
-
-Task:
-1. Integrate findings from all previous stages.
-2. Identify cross-cutting patterns, trends, and causal relationships.
-3. Resolve any remaining conflicts in the data.
-4. Assess the overall strength of the conclusion we are building towards.
-
-Provide a JSON response:
-{{
-    "summary": "A powerful synthesis of the entire research journey.",
-    "key_insights": [
-        "Deep insight 1 (connecting multiple facts)",
-        "Deep insight 2"
-    ],
-    "patterns_identified": [
-        "Trend X is accelerating",
-        "Correlation between A and B"
-    ],
-    "confidence_assessment": {{
-        "overall_confidence": 0.0-1.0,
-        "high_confidence_areas": ["Areas where evidence is solid"],
-        "low_confidence_areas": ["Areas where we are speculating"]
-    }},
-    "decision_factors": [
-        {{
-            "factor": "Critical variable",
-            "importance": "high/medium/low",
-            "evidence_strength": "strong/weak"
-        }}
-    ]
-}}"""
-    
-    def _build_stage_6_prompt(self, query: str, all_findings: List[Dict], context: Dict[str, Any]) -> str:
-        """Build prompt for Stage 6: Final Conclusions."""
-        user_info = context.get("user_info", {})
-        constraints = context.get("constraints", {})
-        preferences = context.get("preferences", {})
-        
-        personalization = ""
-        if user_info or constraints or preferences:
-            personalization = f"""
-PERSONALIZATION CONTEXT:
-User Info: {json.dumps(user_info, indent=2)}
-Constraints: {json.dumps(constraints, indent=2)}
-Preferences: {json.dumps(preferences, indent=2)}
-"""
-        
-        return f"""You are the final authority on this research project. Your goal is to provide a definitive answer and actionable roadmap.
-
-QUERY: {query}
-{personalization}
-
-Task:
-1. Provide a direct answer to the user's core question.
-2. Make specific, prioritized recommendations.
-3. Create a step-by-step implementation plan.
-4. Anticipate risks and provide mitigation strategies.
-5. Define what "success" looks like.
-
-Provide a JSON response:
-{{
-    "summary": "The final verdict. Clear, concise, and authoritative.",
-    "primary_recommendation": "The single best course of action.",
-    "recommendations": [
-        {{
-            "recommendation": "Actionable advice",
-            "reasoning": "Why this is recommended",
-            "priority": "high/medium/low",
-            "confidence": 0.0-1.0
-        }}
-    ],
-    "implementation_plan": [
-        {{
-            "step": "Step 1",
-            "description": "Actionable instruction",
-            "timeline": "Estimated time"
-        }}
-    ],
-    "risk_assessment": [
-        {{
-            "risk": "Potential pitfall",
-            "likelihood": "high/medium/low",
-            "impact": "high/medium/low",
-            "mitigation": "How to avoid or fix it"
-        }}
-    ],
-    "success_metrics": [
-        "Metric 1 to track",
-        "Metric 2 to track"
-    ],
-    "confidence_factors": [
-        "Why we are confident in this result",
-        "Where caution is needed"
-    ]
-}}"""
+    # Note: _build_stage_X_prompt methods have been moved to PromptManager
     
     def _parse_information_gathering_response(self, response: str) -> Dict[str, Any]:
         """Parse Stage 1 response into structured data."""
@@ -739,14 +494,6 @@ Provide a JSON response:
         total_stages = len(self.stages)
         progress = stage_num / total_stages
         
-        # Progress bar
-        bar_length = self.settings.progress_bar_length
-        filled_length = int(bar_length * progress)
-        bar = "█" * filled_length + "░" * (bar_length - filled_length)
-        
-        print(f"\n📊 STAGE {stage_num}/{total_stages}: {stage_name}")
-        print(f"   [{bar}] {progress:.0%}")
-        
         # Stage-specific messages
         messages = {
             1: "🔍 Gathering initial information and evidence...",
@@ -757,4 +504,13 @@ Provide a JSON response:
             6: "🎯 Generating final conclusions and recommendations..."
         }
         
-        print(f"   {messages.get(stage_num, 'Processing...')}")
+        message = messages.get(stage_num, 'Processing...')
+        
+        # Use rich panel for better visibility
+        self.console.print()
+        self.console.print(Panel(
+            f"[bold cyan]STAGE {stage_num}/{total_stages}:[/bold cyan] {stage_name}\n"
+            f"[italic]{message}[/italic]",
+            title=f"Research Progress: {int(progress*100)}%",
+            border_style="blue"
+        ))
